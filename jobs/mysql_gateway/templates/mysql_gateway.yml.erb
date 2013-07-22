@@ -26,7 +26,6 @@ cloud_controller_uri: <%= properties.cc.srv_api_uri %>
 
 service:
   name: mysql
-  unique_id: "92a06847-9446-407f-8aaa-a6f20c1d2cdc"
   version: "5.5"
   description: 'MySQL database'
   provider: core
@@ -37,9 +36,8 @@ service:
     <% plan_description = plan_info.description || "#{plan} plan" %>
     <% extra            = plan_info.extra %>
     <% plan_free_flag   = plan_info.free %>
-    <% unique_id        = plan_info.unique_id %>
     <%= "'#{plan}':" %>
-      unique_id: <%= "'#{unique_id}'" %>
+      unique_id: <%= "'core_mysql_#{plan}'" %>
       description: <%= "'#{plan_description}'" %>
       free: <%= !plan_free_flag.nil? && plan_free_flag.to_s || "true" %>
       extra: <%= "'#{extra}'" %>
