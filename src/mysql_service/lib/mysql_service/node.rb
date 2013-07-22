@@ -358,7 +358,7 @@ class VCAP::Services::Mysql::Node
       binding[:bind_opts] = bind_opts
 
       begin
-        create_database_user(name, binding[:user], binding[:password])
+        create_database_user(name, binding[:user], binding[:password], binding[:bind_opts])
         enforce_instance_storage_quota(service)
       rescue Mysql2::Error => e
         raise "Could not create database user: [#{e.errno}] #{e.error}"
@@ -421,11 +421,24 @@ class VCAP::Services::Mysql::Node
     end
   end
 
-  def create_database_user(name, user, password)
-    @logger.info("Creating credentials: #{user}/#{password} for database #{name}")
-    fetch_pool(name).with_connection do |connection|
-      connection.query("GRANT ALL ON #{name}.* to #{user}@'%' IDENTIFIED BY '#{password}' WITH MAX_USER_CONNECTIONS #{@max_user_conns}")
-      connection.query("GRANT ALL ON #{name}.* to #{user}@'localhost' IDENTIFIED BY '#{password}' WITH MAX_USER_CONNECTIONS #{@max_user_conns}")
+  def create_database_user(database, username, password, binding_options={"privileges"=>["FULL"]})
+    @logger.info("Creating credentials: #{username}/#{password} for database #{database}")
+    binding_options = binding_options["privileges"]
+    raise "Invalid binding options type #{binding_options.class}" unless binding_options.kind_of?(Array)
+    fetch_pool(database).with_connection do |connection|
+      binding_options.each do |binding_option|
+        # this code structure here is for future expansion of binding option
+        case binding_option
+        when "FULL"
+          connection.query("GRANT ALL ON #{database}.* to #{username}@'%' IDENTIFIED BY '#{password}' WITH MAX_USER_CONNECTIONS #{@max_user_conns}")
+          connection.query("GRANT ALL ON #{database}.* to #{username}@'localhost' IDENTIFIED BY '#{password}' WITH MAX_USER_CONNECTIONS #{@max_user_conns}")
+        when "READ"
+          connection.query("GRANT SELECT ON #{database}.* to #{username}@'%' IDENTIFIED BY '#{password}' WITH MAX_USER_CONNECTIONS #{@max_user_conns}")
+          connection.query("GRANT SELECT ON #{database}.* to #{username}@'localhost' IDENTIFIED BY '#{password}' WITH MAX_USER_CONNECTIONS #{@max_user_conns}")
+        else
+          raise "Unknown binding options #{binding_options} for database #{database}, username #{username}, password #{password}"
+        end
+      end
       connection.query("FLUSH PRIVILEGES")
     end
   end
@@ -601,7 +614,7 @@ class VCAP::Services::Mysql::Node
   # Refer to #disable_instance
   def enable_instance(prov_cred, binding_creds_hash)
     @logger.debug("Enable instance #{prov_cred["name"]} request.")
-    prov_cred = bind(prov_cred["name"], nil, prov_cred)
+    prov_cred = bind(prov_cred["name"], ["FULL"], prov_cred)
     binding_creds_hash.each_value do |v|
       cred = v["credentials"]
       binding_opts = v["binding_options"]
@@ -616,7 +629,7 @@ class VCAP::Services::Mysql::Node
   def update_instance(prov_cred, binding_creds_hash)
     @logger.debug("Update instance #{prov_cred["name"]} handles request.")
     name = prov_cred["name"]
-    prov_cred = bind(name, nil, prov_cred)
+    prov_cred = bind(name, ["FULL"], prov_cred)
     binding_creds_hash.each_value do |v|
       cred = v["credentials"]
       binding_opts = v["binding_options"]
