@@ -39,7 +39,7 @@ service:
     <% plan_free_flag   = plan_info.free %>
     <% unique_id        = plan_info.unique_id %>
     <%= "'#{plan}':" %>
-      unique_id: <%= "'#{unique_id}'" %>
+      unique_id: <%= "'core_mysql_#{plan}'" %>
       description: <%= "'#{plan_description}'" %>
       free: <%= !plan_free_flag.nil? && plan_free_flag.to_s || "true" %>
       extra: <%= "'#{extra}'" %>
