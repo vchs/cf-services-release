@@ -58,7 +58,7 @@ describe "Mysql server node", components: [:nats] do
     @opts.freeze
     @default_plan = "free"
     @default_version = @opts[:default_version]
-    @default_opts = "default"
+    @default_opts = {"privileges" => ["FULL"]}
     @tmpfiles = []
 
     # Setup code must be wrapped in EM.run
@@ -457,6 +457,37 @@ describe "Mysql server node", components: [:nats] do
     end
   end
 
+  it "should allow access with different binding options" do
+    EM.run do
+      binding_opts1 = { "privileges" => ["FULL"] }
+      binding_opts2 = { "privileges" => ["READ_ONLY"] }
+      binding1 = @node.bind(@db["name"], binding_opts1)
+      connection1 = connect_to_mysql(binding1)
+      expect do
+        connection1.query("create table example (id INT, data VARCHAR(100))")
+        connection1.query("insert into example (id,data) VALUES(2,'data2')")
+        connection1.query("select * from example")
+      end.to_not raise_error
+      binding2 = @node.bind(@db["name"], binding_opts2)
+      connection2 = connect_to_mysql(binding2)
+      expect { connection2.query("insert into example (id,data) VALUES(3,'data3')") }.to raise_error(Mysql2::Error, /command denied/)
+      expect { connection2.query("select * from example") }.to_not raise_error
+      EM.stop
+    end
+  end
+
+  it "should forbid access for wrong binding options" do
+    EM.run do
+      binding_opts1 = ["FULL"]
+      expect { @node.bind(@db["name"], binding_opts1) }.to raise_error(RuntimeError, /Invalid binding options format/)
+      binding_opts2 = { "privileges" => "FULL" }
+      expect { @node.bind(@db["name"], binding_opts2) }.to raise_error(RuntimeError, /Invalid binding privileges type/)
+      binding_opts3 = { "privileges" => ["READ-ONLY"] }
+      expect { @node.bind(@db["name"], binding_opts3) }.to raise_error(RuntimeError, /Unknown binding privileges/)
+      EM.stop
+    end
+  end
+
   it "should supply different credentials when binding evoked with the same input" do
     EM.run do
       binding = @node.bind(@db["name"], @default_opts)
@@ -497,7 +528,6 @@ describe "Mysql server node", components: [:nats] do
 
   it "should delete all bindings if service is unprovisioned" do
     EM.run do
-      @default_opts = "default"
       bindings = []
       3.times { bindings << @node.bind(@db["name"], @default_opts)}
       @test_dbs[@db] = bindings
@@ -575,19 +605,19 @@ describe "Mysql server node", components: [:nats] do
       expect do
         conn.query("call defaultfunc(@testcount)")
         conn.query("select @testcount")
-      end.should_not raise_error
+      end.to_not raise_error
       expect do
         conn.query("call myfunc(@testcount)")
         conn.query("select @testcount")
-      end.should_not raise_error # secuirty type should be invoker or a error will be raised.
+      end.to_not raise_error # secuirty type should be invoker or a error will be raised.
       expect do
         conn.query("call myfunc2(@testcount)")
         conn.query("select @testcount")
-      end.should_not raise_error
+      end.to_not raise_error
       expect do
         conn.query("call myfunc3(@testcount)")
         conn.query("select @testcount")
-      end.should_not raise_error
+      end.to_not raise_error
       EM.stop
     end
   end
@@ -745,7 +775,7 @@ describe "Mysql server node", components: [:nats] do
     EM.run do
       v1 = @node.varz_details
       db = new_instance
-      binding = @node.bind(db["name"], [])
+      binding = @node.bind(db["name"], @default_opts)
       @test_dbs[db] = [binding]
       v2 = @node.varz_details
       (v2[:provision_served] - v1[:provision_served]).should == 1
@@ -927,14 +957,14 @@ describe "Mysql server node", components: [:nats] do
           @node.logger.info("Error during cleanup #{e}")
         end
       end if @test_dbs
+      @tmpfiles.each do |tmpfile|
+        FileUtils.rm_r tmpfile
+      end
       EM.stop
     end
   end
 
   after :all do
-    @tmpfiles.each do |tmpfile|
-      FileUtils.rm_r tmpfile
-    end
-    FileUtils.rm_rf @opts[:node_tmp_dir]
+    FileUtils.rm_rf getNodeTestConfig[:node_tmp_dir]
   end
 end
