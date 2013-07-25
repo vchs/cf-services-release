@@ -15,11 +15,11 @@ gem "thin"
 gem "sinatra"
 gem "rake"
 gem "curb"
-gem 'vcap_common', :require => ['vcap/common', 'vcap/component'], :git => 'git://github.com/cloudfoundry/vcap-common.git', :ref => '658be8a8f6'
-gem 'vcap_logging', :require => ['vcap/logging'], :git => 'git://github.com/cloudfoundry/common.git', :ref => 'b96ec1192'
+gem 'vcap_common', :require => ['vcap/common', 'vcap/component'], :git => 'https://github.com/cloudfoundry/vcap-common.git', :ref => '658be8a8f6'
+gem 'vcap_logging', :require => ['vcap/logging'], :git => 'https://github.com/cloudfoundry/common.git', :ref => 'b96ec1192'
 gem 'vcap_services_base', :git => 'https://github.com/vchs/vcap-services-base.git', :ref => '4da07ae75'
-gem 'warden-client', :require => ['warden/client'], :git => 'git://github.com/cloudfoundry/warden.git', :ref => 'fe6cb51'
-gem 'warden-protocol', :require => ['warden/protocol'], :git => 'git://github.com/cloudfoundry/warden.git', :ref => 'fe6cb51'
+gem 'warden-client', :require => ['warden/client'], :git => 'https://github.com/cloudfoundry/warden.git', :ref => 'fe6cb51'
+gem 'warden-protocol', :require => ['warden/protocol'], :git => 'https://github.com/cloudfoundry/warden.git', :ref => 'fe6cb51'
 
 group :test do
   gem 'activesupport'
