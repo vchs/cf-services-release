@@ -104,3 +104,8 @@ python27/Python-2.7.5.tar.bz2:
   sha: !binary |-
     NmNmYWRhMWE3Mzk1NDRhNmZhN2YyNjAxYjUwMGZiYTAyMjI5NjU2Yg==
   size: 12147710
+perl/perl-5.18.1.tar.gz:
+  object_id: af0b4fa9-f1eb-401d-a970-3d8450e36bcb
+  sha: !binary |-
+    NTI0YTEwYmE3NmUzOTRlNWQ0MGIzMTlmNTYwOWNiNGM0YTk2ZjU2NA==
+  size: 17337400

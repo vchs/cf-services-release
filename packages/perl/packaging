@@ -1,0 +1,11 @@
+# abort script on any command that exit with a non zero value
+set -e
+
+VERSION=5.18.1
+tar zxvf perl/perl-$VERSION.tar.gz
+(
+  cd perl-$VERSION
+  ./Configure -des -Dprefix=${BOSH_INSTALL_TARGET}
+  make
+  make install
+)
