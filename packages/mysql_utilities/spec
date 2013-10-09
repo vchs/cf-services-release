@@ -1,0 +1,7 @@
+---
+name: mysql_utilities
+dependencies:
+  - python27
+files:
+  - mysql_utilities/mysql-connector-python-1.0.12.tar.gz
+  - mysql_utilities/mysql-utilities-1.3.5.tar.gz

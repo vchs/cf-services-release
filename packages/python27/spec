@@ -1,0 +1,5 @@
+---
+name: python27
+dependencies:
+files:
+  - python27/Python-2.7.5.tar.bz2

@@ -1,0 +1,10 @@
+# abort script on any command that exit with a non zero value
+set -e
+
+tar xjf python27/Python-2.7.5.tar.bz2
+(
+  cd Python-2.7.5
+  ./configure --prefix=${BOSH_INSTALL_TARGET}
+  make
+  make install
+)
