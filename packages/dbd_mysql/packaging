@@ -1,0 +1,22 @@
+# abort script on any command that exit with a non zero value
+set -e
+
+MYSQL_CONFIG=/var/vcap/packages/mysql56/bin/mysql_config
+PERL_BIN=/var/vcap/packages/perl/bin/perl
+DBI_VERSION=1.628
+DBD_VERSION=4.024
+tar zxvf perl/DBI-${DBI_VERSION}.tar.gz
+(
+  cd DBI-${DBI_VERSION}
+  $PERL_BIN Makefile.PL INSTALL_BASE=${BOSH_INSTALL_TARGET}
+  make
+  make install
+)
+tar zxvf perl/DBD-mysql-${DBD_VERSION}.tar.gz
+(
+  cd DBD-mysql-${DBD_VERSION}
+  export PERL5LIB=$PERL5LIB:${BOSH_INSTALL_TARGET}/lib/perl5/x86_64-linux
+  $PERL_BIN Makefile.PL --mysql_config=$MYSQL_CONFIG INSTALL_BASE=${BOSH_INSTALL_TARGET}
+  make
+  make install
+)

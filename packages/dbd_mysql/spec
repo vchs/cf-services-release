@@ -1,0 +1,8 @@
+---
+name: dbd_mysql
+dependencies:
+  - perl
+  - mysql56
+files:
+  - perl/DBI-1.628.tar.gz
+  - perl/DBD-mysql-4.024.tar.gz
