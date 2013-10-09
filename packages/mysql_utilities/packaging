@@ -1,0 +1,16 @@
+# abort script on any command that exit with a non zero value
+set -e
+
+PYTHON_BIN=/var/vcap/packages/python27/bin/python
+
+tar xzf mysql_utilities/mysql-connector-python-1.0.12.tar.gz
+(
+  cd mysql-connector-python-1.0.12
+  $PYTHON_BIN ./setup.py install --prefix=${BOSH_INSTALL_TARGET}
+)
+
+tar xzf mysql_utilities/mysql-utilities-1.3.5.tar.gz
+(
+  cd mysql-utilities-1.3.5
+  $PYTHON_BIN ./setup.py install --prefix=${BOSH_INSTALL_TARGET}
+)

@@ -89,3 +89,18 @@ ruby/ruby-1.9.2-p180.tar.gz:
   sha: !binary |-
     NmE0ODJiYzA3MjM5YjM3YmNhZGY2OGRkYTYzYzY1ZDIwZGMxOWViZQ==
   size: 11158935
+mysql_utilities/mysql-connector-python-1.0.12.tar.gz:
+  object_id: dbb26d92-5118-4294-a09b-0c07f7b8a4d4
+  sha: !binary |-
+    Y2M3YmRjZWVmYmE5ZDkyOGRkYzhjY2MzNjRjNjQyMWFiNjIyZTRjMQ==
+  size: 230923
+mysql_utilities/mysql-utilities-1.3.5.tar.gz:
+  object_id: e786505d-7e2e-4dc6-8f8d-62779046c48f
+  sha: !binary |-
+    MWIwZmU5ZWI2Y2I0Zjk2Mzg4Zjg3MTg4YWJlNGIwYjdiZTdlZmQ5OQ==
+  size: 370056
+python27/Python-2.7.5.tar.bz2:
+  object_id: 1780b500-2489-4776-934f-7783afcdc429
+  sha: !binary |-
+    NmNmYWRhMWE3Mzk1NDRhNmZhN2YyNjAxYjUwMGZiYTAyMjI5NjU2Yg==
+  size: 12147710
