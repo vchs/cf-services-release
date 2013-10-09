@@ -104,3 +104,13 @@ python27/Python-2.7.5.tar.bz2:
   sha: !binary |-
     NmNmYWRhMWE3Mzk1NDRhNmZhN2YyNjAxYjUwMGZiYTAyMjI5NjU2Yg==
   size: 12147710
+perl/DBI-1.628.tar.gz:
+  object_id: 4cfa92db-b1a1-4f91-bb44-3dc9f4a89836
+  sha: !binary |-
+    NzA1YWUzOWFhNTY1ZTIwYzllYjlmNjZhOGViMzFlYzJkNTY2MDEzNA==
+  size: 586733
+perl/DBD-mysql-4.024.tar.gz:
+  object_id: 1f032af6-3209-467d-9a6c-42163c3752fd
+  sha: !binary |-
+    NWVhYjZmOTdkNDNjZTIzNzAxNDRhMjBlOTQwODIwZjNhMjdlZDYxNg==
+  size: 336608
