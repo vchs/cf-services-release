@@ -1,0 +1,10 @@
+# abort script on any command that exit with a non zero value
+set -e
+
+PKG_VERSION=2.1.5-680-Linux-x86_64
+FOLDER_VERSION=2.1.5-Linux-x86_64
+tar xzf mysql_utilities/percona-xtrabackup-${PKG_VERSION}.tar.gz
+(
+  cd percona-xtrabackup-${FOLDER_VERSION}
+  cp -a bin ${BOSH_INSTALL_TARGET}
+)
