@@ -2,6 +2,8 @@
 final_name: cf-services-release
 min_cli_version: 1.5.0.pre.3
 blobstore:
-  provider: s3
+  provider: dav
   options:
-    bucket_name: blob.cfblob.com
+    endpoint: http://blobs.sin2.beefstall.info
+    user: agent
+    password: AgenT
