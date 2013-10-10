@@ -109,3 +109,8 @@ perl/perl-5.18.1.tar.gz:
   sha: !binary |-
     NTI0YTEwYmE3NmUzOTRlNWQ0MGIzMTlmNTYwOWNiNGM0YTk2ZjU2NA==
   size: 17337400
+mysql_utilities/percona-xtrabackup-2.1.5-680-Linux-x86_64.tar.gz:
+  object_id: 4a5757af-8023-4883-a721-30e32e7d456a
+  sha: !binary |-
+    NmU0NjU3MTM5Yjk0OWNlY2Q4MWE5NjgwMmQ1YzU1ZDM0NmQ3MGFhOQ==
+  size: 49146542

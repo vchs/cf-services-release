@@ -1,0 +1,4 @@
+---
+name: mysql_xtrabackup
+files:
+  - mysql_utilities/percona-xtrabackup-2.1.5-680-Linux-x86_64.tar.gz
