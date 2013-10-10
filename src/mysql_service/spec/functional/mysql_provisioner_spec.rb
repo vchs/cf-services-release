@@ -14,7 +14,17 @@ class VCAP::Services::Mysql::Gateway
   end
 end
 
-describe 'Mysql Provisioner Test', components: [:nats]  do
+#describe 'Mysql Provisioner Test', components: [:nats]  do
+describe 'Mysql Provisioner Test' do
+
+  before :all do
+    nats_runner = component(:nats, "unittest")
+    nats_runner.start
+  end
+
+  after :all do
+    component!(:nats).stop
+  end
 
   before :each do
     @nodeopts = getNodeTestConfig
