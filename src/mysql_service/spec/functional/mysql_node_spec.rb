@@ -50,8 +50,17 @@ module VCAP
   end
 end
 
-describe "Mysql server node", components: [:nats] do
+describe "Mysql server node" do
   include VCAP::Services::Mysql
+
+  before :all do
+    nats_runner = component(:nats, "MysqlNode")
+    nats_runner.start
+  end
+
+  after :all do
+    component!(:nats).stop
+  end
 
   before :each do
     @opts = getNodeTestConfig
@@ -124,7 +133,7 @@ describe "Mysql server node", components: [:nats] do
         conn.query("INSERT INTO test VALUE(10)")
         conn.query("INSERT INTO test VALUE(20)")
         table_size = @node.dbs_size(conn)[@db["name"]]
-        table_size.should > 0
+        table_size.should be > 0
         # should also calculate index size
         conn.query("CREATE INDEX id_index on test(id)")
         all_size = @node.dbs_size(conn)[@db["name"]]
@@ -372,7 +381,7 @@ describe "Mysql server node", components: [:nats] do
           EM.add_timer(opts[:max_long_tx] * 5) {
             expect {conn.query("select * from a for update")}.to raise_error(Mysql2::Error)
             conn.close
-            node.varz_details[:long_transactions_killed].should > old_killed
+            node.varz_details[:long_transactions_killed].should be > old_killed
 
             node.instance_variable_set(:@kill_long_tx, false)
             conn = connect_to_mysql(@db)
@@ -382,7 +391,7 @@ describe "Mysql server node", components: [:nats] do
             old_counter = node.varz_details[:long_transactions_count]
             EM.add_timer(opts[:max_long_tx] * 5) {
               expect {conn.query("select * from a for update")}.to_not raise_error(Mysql2::Error)
-              node.varz_details[:long_transactions_count].should > old_counter
+              node.varz_details[:long_transactions_count].should be > old_counter
               old_counter = node.varz_details[:long_transactions_count]
               EM.add_timer(opts[:max_long_tx] * 5) {
                 #counter should not double-count the same long transaction
@@ -433,7 +442,7 @@ describe "Mysql server node", components: [:nats] do
           err.should_not == nil
           err.message.should =~ /interrupted/
           # counter should also be updated
-          node.varz_details[:long_queries_killed].should > old_counter
+          node.varz_details[:long_queries_killed].should be > old_counter
           EM.stop
         }
       end
@@ -643,7 +652,7 @@ describe "Mysql server node", components: [:nats] do
       conn.query('create table MyTestTable(id int)')
       @node.dump_instance(@db, nil, '/tmp').should == true
       File.open(File.join("/tmp", "#{@db['name']}.sql")) do |f|
-        line = f.each_line.find {|line| line =~ /MyTestTable/}
+        line = f.each_line.find {|l| l =~ /MyTestTable/}
         line.should_not be nil
       end
       @tmpfiles << File.join("/tmp", "#{@db['name']}.sql")
@@ -740,16 +749,16 @@ describe "Mysql server node", components: [:nats] do
       EM.add_timer(1) do
         varz = node.varz_details
         varz.should be_instance_of Hash
-        varz[:queries_since_startup].should >0
-        varz[:queries_per_second].should >= 0
+        varz[:queries_since_startup].should be > 0
+        varz[:queries_per_second].should be >= 0
         varz[:database_status].should be_instance_of Array
-        varz[:max_capacity].should > 0
-        varz[:available_capacity].should >= 0
+        varz[:max_capacity].should be > 0
+        varz[:available_capacity].should be >= 0
         varz[:used_capacity].should == (varz[:max_capacity] - varz[:available_capacity] )
-        varz[:long_queries_killed].should >= 0
-        varz[:long_transactions_killed].should >= 0
-        varz[:provision_served].should >= 0
-        varz[:binding_served].should >= 0
+        varz[:long_queries_killed].should be >= 0
+        varz[:long_transactions_killed].should be >= 0
+        varz[:provision_served].should be >= 0
+        varz[:binding_served].should be >= 0
         varz[:pools].should be_instance_of Hash
         EM.stop
       end
@@ -789,7 +798,7 @@ describe "Mysql server node", components: [:nats] do
       v = @node.varz_details
       instance = v[:database_status].find {|d| d[:name] == @db["name"]}
       instance.should_not be_nil
-      instance[:size].should >= 0
+      instance[:size].should be >= 0
       EM.stop
     end
   end
@@ -900,7 +909,7 @@ describe "Mysql server node", components: [:nats] do
           # server side timeout
           node.fetch_pool(@db['name']).with_connection do |conn|
             # simulate connection idle
-            sleep (timeout * 5)
+            sleep(timeout * 5)
             expect{ conn.query("select 1") }.to raise_error(Mysql2::Error, /MySQL server has gone away/)
           end
           # client side timeout
@@ -929,7 +938,7 @@ describe "Mysql server node", components: [:nats] do
         begin
           # server side timeout
           node.fetch_pool(@db['name']).with_connection do |conn|
-            sleep (5)
+            sleep(5)
             expect{ conn.query("select 1") }.to_not raise_error
           end
           # client side timeout
