@@ -20,6 +20,12 @@ version_configs = {
     'name'    => 'mysql55',
     'pid'     => '/var/vcap/sys/run/mysqld/mysqld55.pid',
     'script'  => '/var/vcap/jobs/mysql_node/bin/mysql55_ctl',
+  },
+
+  '5.6' => {
+    'name'    => 'mysql56',
+    'pid'     => '/var/vcap/sys/run/mysqld/mysqld56.pid',
+    'script'  => '/var/vcap/jobs/mysql_node/bin/mysql56_ctl',
   }
 }
 %>

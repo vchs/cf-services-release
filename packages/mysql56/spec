@@ -1,0 +1,7 @@
+---
+name: mysql56
+files:
+- mysql/server-5.6.13-linux-glibc2.5-x86_64.tar.gz
+- mysql/mysql-initdb-5.6.13-linux-glibc2.5-x86_64.tar.gz
+- mysql/mysql56_warden.server
+- mysql/mysql56.server
