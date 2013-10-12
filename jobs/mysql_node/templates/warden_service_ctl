@@ -13,6 +13,7 @@ PIDFILE=$BASE_DIR/service.pid
 source $COMMON_DIR/bin/utils.sh
 
 case $VERSION in
+  5.6) VERSION="56" ;;
   5.5) VERSION="55" ;;
   5.1) VERSION=""   ;;
 esac

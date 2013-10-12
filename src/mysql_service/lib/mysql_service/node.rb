@@ -907,6 +907,8 @@ class VCAP::Services::Mysql::Node::WardenProvisionedService
     case version
     when "5.5"
       3307
+    when "5.6"
+      3308
     else
       3306
     end
@@ -916,6 +918,8 @@ class VCAP::Services::Mysql::Node::WardenProvisionedService
     case version
     when "5.5"
       "my55.cnf"
+    when "5.6"
+      "my56.cnf"
     else
       "my.cnf"
     end

@@ -124,3 +124,18 @@ perl/DBD-mysql-4.024.tar.gz:
   sha: !binary |-
     NWVhYjZmOTdkNDNjZTIzNzAxNDRhMjBlOTQwODIwZjNhMjdlZDYxNg==
   size: 336608
+mysql/server-5.6.13-linux-glibc2.5-x86_64.tar.gz:
+  object_id: 97bc9bd2-d1ea-4695-bfb0-a84a3a9cd2e7
+  sha: !binary |-
+    NTY1Y2I0YTBmYWZlOGI0MjYxMDEzODJkZDZkMWViMzJiNzk4Njk2Mg==
+  size: 76577626
+mysql/client-5.6.13-linux-glibc2.5-x86_64.tar.gz:
+  object_id: e238fe78-7880-4d68-baba-c75b68ec1557
+  sha: !binary |-
+    ZTAxNTg0N2RhZWQ2ZDQ1YTI3NjM4ZDhiZDlhNTkyMjM1MjUxN2I2Mg==
+  size: 5231400
+mysql/mysql-initdb-5.6.13-linux-glibc2.5-x86_64.tar.gz:
+  object_id: 40e1f6a5-b347-4c1f-9a66-d3bcfe12e7e5
+  sha: !binary |-
+    MmMzODM0NjAyMTI4NDkwMmE5ZDJhYjE4M2MwYjBjNWJmZjMyODU1OQ==
+  size: 270476

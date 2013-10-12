@@ -17,6 +17,12 @@ templates:
   my55.cnf.erb: config/my55.cnf
   mysql55_ctl.erb: bin/mysql55_ctl
 
+  # mysql 5.6 related files
+  my56.bootstrap.erb: bin/my56.bootstrap
+  my56.shutdown.erb: bin/my56.shutdown
+  my56.cnf.erb: config/my56.cnf
+  mysql56_ctl.erb: bin/mysql56_ctl
+
   create_mysql_tmp_dir.erb: bin/create_mysql_tmp_dir
   mysql_node.yml.erb: config/mysql_node.yml
   mysql_worker.yml.erb: config/mysql_worker.yml
@@ -37,6 +43,7 @@ packages:
   - mysqlclient
   - mysql
   - mysql55
+  - mysql56
   - ruby
   - ruby_next
   - sqlite

@@ -21,6 +21,12 @@ version_configs = {
     'port'        => 3307,
     'socket'      => '/var/vcap/sys/run/mysqld/mysqld55.sock',
     'service_dir'  => '/var/vcap/packages/mysql55',
+  },
+
+  '5.6' => {
+    'port'        => 3308,
+    'socket'      => '/var/vcap/sys/run/mysqld/mysqld56.sock',
+    'service_dir'  => '/var/vcap/packages/mysql56',
   }
 }
 nats_props_name = properties.nats_props || "nats"

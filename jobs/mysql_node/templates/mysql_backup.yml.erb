@@ -19,6 +19,12 @@ version_configs = {
     'port'          => 3307,
     'socket'        => '/var/vcap/sys/run/mysqld/mysqld55.sock',
     'mysqldump_bin' => '/var/vcap/packages/mysql55/bin/mysqldump'
+  },
+
+  '5.6' => {
+    'port'          => 3308,
+    'socket'        => '/var/vcap/sys/run/mysqld/mysqld56.sock',
+    'mysqldump_bin' => '/var/vcap/packages/mysql56/bin/mysqldump'
   }
 }
 %>

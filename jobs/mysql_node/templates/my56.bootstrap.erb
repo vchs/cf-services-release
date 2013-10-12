@@ -1,0 +1,6 @@
+export LD_LIBRARY_PATH=/var/vcap/packages/mysql56/lib
+export PATH=/var/vcap/packages/mysql56/bin
+
+password="<%= properties.mysql_node.password %>"
+
+/var/vcap/packages/mysql56/bin/mysqladmin -u root password "${password}" -S /var/vcap/sys/run/mysqld/mysqld56.sock
