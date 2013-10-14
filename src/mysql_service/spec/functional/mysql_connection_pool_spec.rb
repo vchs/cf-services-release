@@ -2,6 +2,8 @@
 require 'spec_helper'
 require 'logger'
 require 'yajl'
+require 'mysql2'
+require 'mysql_service/node'
 require 'mysql_service/util'
 require 'timeout'
 
@@ -21,13 +23,50 @@ end
 describe 'Mysql Connection Pool Test' do
 
   before :all do
+    nats_runner = component(:nats, "MysqlConn")
+    nats_runner.start
     @opts = getNodeTestConfig
     @logger = @opts[:logger]
     @opts.freeze
     @mysql_configs = @opts[:mysql]
     @default_version = @opts[:default_version]
-    host, user, password, port, socket =  %w{host user pass port socket}.map { |opt| @mysql_configs[@default_version][opt] }
-    @pool = connection_pool_klass.new(:host => host, :username => user, :password => password, :database => "mysql", :port => port.to_i, :socket => socket, :logger => @logger, :pool => 20)
+    @use_warden = @opts[:use_warden]
+    EM.run do
+      @node = VCAP::Services::Mysql::Node.new(@opts)
+      EM.add_timer(1) do
+        @db = @node.provision(@opts[:plan], nil, @default_version);
+        @db_instance = @node.mysqlProvisionedService.get(@db["name"])
+        EM.stop
+      end
+    end if @use_warden
+    @pool = get_pool
+  end
+
+  after :all do
+    EM.run do
+      @node.unprovision(@db["name"], [])
+      EM.stop
+    end if @use_warden
+    component!(:nats).stop
+  end
+
+  def get_pool(opts={})
+    host, user, password, port, socket = %w{
+        host user pass port socket
+    }.map { |opt| @mysql_configs[@default_version][opt] }
+    host = @db_instance.ip if @use_warden
+
+    params = {
+      :host => host,
+      :username => user,
+      :password => password,
+      :database => "mysql",
+      :port => port.to_i,
+      :socket => socket,
+      :logger => @logger,
+      :pool => 20
+    }.merge(opts)
+    connection_pool_klass.new(params)
   end
 
   it "should provide mysql connections" do
@@ -48,7 +87,8 @@ describe 'Mysql Connection Pool Test' do
           begin
             @pool.with_connection do |conn|
               sleep_time = rand(5).to_f/10
-              # if multiple threads acquire the same connection, following query would fail.
+              # if multiple threads acquire the same connection,
+              # following query would fail.
               conn.query("select sleep(#{sleep_time})")
             end
           end
@@ -61,8 +101,7 @@ describe 'Mysql Connection Pool Test' do
   end
 
   it "should verify a connection before checkout" do
-    host, user, password, port, socket =  %w{host user pass port socket}.map { |opt| @mysql_configs[@default_version][opt] }
-    pool = connection_pool_klass.new(:host => host, :username => user, :password => password, :database => "mysql", :port => port.to_i, :socket => socket, :pool => 1, :logger => @logger)
+    pool = get_pool(:pool => 1)
     pool.max = 1
 
     pool.with_connection do |conn|
@@ -115,19 +154,20 @@ describe 'Mysql Connection Pool Test' do
     error = Mysql2::Error.new("Can't connect to mysql")
     Mysql2::Client.should_receive(:new).and_raise(error)
 
-    expect{ pool.with_connection{|conn| conn.query("select 1")} }.to raise_error(Mysql2::Error, /Can't connect to mysql/)
+    expect do
+      pool.with_connection{|conn| conn.query("select 1")}
+    end.to raise_error(Mysql2::Error, /Can't connect to mysql/)
 
     # Ensure that we can still checkout from the pool
     mock_client.should_receive(:ping).and_return(true)
     mock_client.should_receive(:query).with("select 1").and_return(true)
-    expect{ pool.with_connection{|conn| conn.query("select 1")} }.to_not raise_error
+    expect do
+      pool.with_connection{|conn| conn.query("select 1")}
+    end.to_not raise_error
   end
 
   it "should raise error when pool is still empty after timeout second" do
-    host, user, password, port, socket =  %w{host user pass port socket}.map { |opt| @mysql_configs[@default_version][opt] }
-    # create a tiny pool with very short timeout
-    pool = connection_pool_klass.new(:host => host, :username => user, :password => password, :database => "mysql",
-                                     :port => port.to_i, :socket => socket, :pool => 1, :logger => @logger, :wait_timeout => 2)
+    pool = get_pool(:pool => 1, :wait_timeout => 2)
     pool.max = 1
     threads = []
     threads << Thread.new do
@@ -155,17 +195,14 @@ describe 'Mysql Connection Pool Test' do
   end
 
   it "should enlarge and shrink connection pool" do
-    host, user, password, port, socket =  %w{host user pass port socket}.map { |opt| @mysql_configs[@default_version][opt] }
-    # create a tiny pool with very short timeout
-    pool = connection_pool_klass.new(:host => host, :username => user, :password => password, :database => "mysql",
-                                     :port => port.to_i, :socket => socket, :pool => 1, :logger => @logger, :expire => 2,
-                                     :pool_min => 1, :pool_max => 5)
+    pool = get_pool(:expire => 2, :pool_min => 1, :pool_max =>5, :pool => 1)
     pool.connections.size.should == 1
     threads  = []
     6.times do
       threads << Thread.new do
         pool.with_connection do |conn|
-          sleep(1)                    #make sure connections are created but not checked in
+          #make sure connections are created but not checked in
+          sleep(1)
           conn.query("select 1")
         end
       end
@@ -179,9 +216,7 @@ describe 'Mysql Connection Pool Test' do
   end
 
   it "should lazy shutdown mysql connection pool" do
-    host, user, password, port, socket =  %w{host user pass port socket}.map { |opt| @mysql_configs[@default_version][opt] }
-    pool = connection_pool_klass.new(:host => host, :username => user, :password => password, :database => "mysql",
-                                     :port => port.to_i, :socket => socket, :pool => 1, :logger => @logger)
+    pool = get_pool(:pool => 1)
     Thread.new do
       pool.with_connection do |conn|
         sleep(0.5)
@@ -192,7 +227,7 @@ describe 'Mysql Connection Pool Test' do
     sleep(0.2) #wait for the thread to check out the connection
     pool.shutdown
     pool.shutting_down.should == true
-    pool.connections.size.should > 0   #should still keep the connections
+    pool.connections.size.should be > 0   #should still keep the connections
     pool.connections.each { |conn| conn.active?.should == true }
 
     expect do
@@ -202,6 +237,7 @@ describe 'Mysql Connection Pool Test' do
     end.to raise_error(StandardError, /shutting down/)
 
     sleep(2)
-    pool.connections.size.should == 0  #connections should have been closed and removed
+    #connections should have been closed and removed
+    pool.connections.size.should == 0
   end
 end
