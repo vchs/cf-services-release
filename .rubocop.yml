@@ -1,0 +1,20 @@
+AllCops:
+  # Include gemspec and Rakefile
+  Includes:
+    # - '**/*.gemspec'
+    - '**/Rakefile'
+  Excludes: 
+    - '**/*_spec.rb'
+    - '**/policy/cc_layer/spec/support/vchs.rb'
+  # By default, the rails cops are not run. Override in project or home
+  # directory .rubocop.yml files, or by giving the -R/--rails option.
+  RunRailsCops: false
+
+Encoding:
+  Description: 'Use UTF-8 as the source file encoding.'
+  Enabled: false
+
+StringLiterals:
+  Description: 'Checks if uses of quotes match the configured preference.'
+  Enabled: false
+
