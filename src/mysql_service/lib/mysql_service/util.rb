@@ -60,6 +60,56 @@ module VCAP
           res
         end
 
+        def backup_mysql_server(type, mysql_config, mysqld_properties, dump_path, opts)
+          raise ArgumentError, "Missing options." unless type && mysql_config &&
+                                                         mysqld_properties && dump_path
+          raise ArgumentError, "Unknown backup type" unless ["full", "incremental"].include? type
+          make_logger
+          host, user, password, port = %w{host user pass port}.map { |opt| mysql_config[opt] }
+
+          cmd = ""
+          path_variable = "$PATH"
+          path_variable = "#{opts[:perl_bin]}:#{path_variable}" if opts[:perl_bin]
+          path_variable = "#{opts[:xtrabackup_bin]}:#{path_variable}" if opts[:xtrabackup_bin]
+          cmd << "export PATH=#{path_variable};"
+          cmd << "export PERL5LIB=$PERL5LIB:#{opts[:dbd_mysql_lib]};" if opts[:dbd_mysql_lib]
+
+          cmd << "innobackupex --host=#{host} --port=#{port} --user=#{user} --password=#{password} "
+
+          defaults_file = "#{dump_path}/my.cnf"
+          output_file = "#{dump_path}/backup_outpput"
+          File.open(defaults_file, "w") do |f|
+            f.write("[mysqld]\n")
+            mysqld_properties.each { |k, v| f.write("#{k}=#{v}\n") }
+          end
+
+          if type == "incremental"
+            raise "Cannot create incremental backup. Missing LSN." unless opts[:last_lsn]
+            cmd << "--incremental --incremental-lsn=#{opts[:last_lsn]} "
+          end
+
+          cmd << "--defaults-file=#{defaults_file} #{dump_path} > #{output_file} 2>&1"
+          @logger.info("Take backup command: #{cmd}")
+
+          on_err = Proc.new do |command, code, msg|
+            raise "CMD '#{command}' exit with code: #{code}. Message: #{msg}"
+          end
+          res = CMDHandle.execute(cmd, nil, on_err)
+
+          raise "Failed to execute dump command to #{host}" unless res
+          output = File.read(output_file)
+          backup_folder = output.match(/Backup created in directory '(.+)'/)[1]
+          last_lsn = output.match(/log scanned up to \((\d+)\)/)[1]
+          raise "Can't get necessary data from backup output" unless backup_folder && last_lsn
+          {:files => [backup_folder], :last_lsn => last_lsn }
+        rescue => e
+          @logger.error("Error backup server on host #{host}: #{fmt_error(e)}")
+          nil
+        ensure
+          FileUtils.rm_rf(defaults_file, :secure => true)
+          FileUtils.rm_rf(output_file, :secure => true)
+        end
+
         # dump a single database to the given path
         #  db: the name of the database you want to dump
         #  mysql_config: hash contains following keys:

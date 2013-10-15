@@ -19,6 +19,11 @@ tmp_dir = File.expand_path('../tmp', File.dirname(__FILE__))
 FileUtils.mkdir_p(tmp_dir)
 IntegrationExampleGroup.tmp_dir = tmp_dir
 
+SPEC_TMP_DIR = "/tmp/mysql_node_spec"
+REDIS_PID = "#{SPEC_TMP_DIR}/redis.pid"
+REDIS_CACHE_PATH = "#{SPEC_TMP_DIR}/redis_cache"
+FileUtils.mkdir_p(REDIS_CACHE_PATH)
+
 RSpec.configure do |c|
   c.include IntegrationExampleGroup, :type => :integration, :example_group => {:file_path => /\/integration\//}
   c.include IntegrationExampleGroup, :type => :integration, :example_group => {:file_path => /\/functional\//}
@@ -112,11 +117,10 @@ end
 def getNodeTestConfig()
   config_file = File.join(config_base_dir, 'mysql_node.yml')
   config = YAML.load_file(config_file)
-  spec_tmp_dir = "/tmp/mysql_node_spec"
   options = {
     # service node related configs
     :logger             => getLogger,
-    :node_tmp_dir       => spec_tmp_dir,
+    :node_tmp_dir       => SPEC_TMP_DIR,
     :plan               => parse_property(config, "plan", String),
     :capacity           => parse_property(config, "capacity", Integer),
     :gzip_bin           => parse_property(config, "gzip_bin", String),
@@ -139,14 +143,14 @@ def getNodeTestConfig()
     :max_disk                => parse_property(config, "max_disk", Integer),
 
     # hard code unit test directories of mysql unit test to /tmp
-    :base_dir => File.join(spec_tmp_dir, "data"),
-    :local_db => File.join("sqlite3:", spec_tmp_dir, "mysql_node.db"),
-    :disabled_file => File.join(spec_tmp_dir, "DISABLED"),
+    :base_dir => File.join(SPEC_TMP_DIR, "data"),
+    :local_db => File.join("sqlite3:", SPEC_TMP_DIR, "mysql_node.db"),
+    :disabled_file => File.join(SPEC_TMP_DIR, "DISABLED"),
   }
   if options[:use_warden]
     warden_config = parse_property(config, "warden", Hash, :optional => true)
 
-    options[:service_log_dir]    = File.join(spec_tmp_dir, "log")
+    options[:service_log_dir]    = File.join(SPEC_TMP_DIR, "log")
     options[:service_bin_dir]    = parse_property(warden_config, "service_bin_dir", Hash)
     options[:service_common_dir] = parse_property(warden_config, "service_common_dir", String)
 
@@ -155,8 +159,8 @@ def getNodeTestConfig()
     options[:filesystem_quota] = parse_property(warden_config, "filesystem_quota", Boolean, :optional => true)
 
     # hardcode the directories for mysql unit tests to /tmp
-    options[:service_log_dir] = File.join(spec_tmp_dir, "log")
-    options[:image_dir]       = File.join(spec_tmp_dir, "image_dir")
+    options[:service_log_dir] = File.join(SPEC_TMP_DIR, "log")
+    options[:image_dir]       = File.join(SPEC_TMP_DIR, "image_dir")
   else
     options[:ip_route] = "127.0.0.1"
   end
@@ -178,8 +182,38 @@ def getProvisionerTestConfig()
   options
 end
 
+def get_worker_config()
+  config_file = File.join(config_base_dir, 'mysql_worker.yml')
+  config = YAML.load_file(config_file)
+  config["mysqld"].each { |k, v| config["mysqld"][k]["datadir"] = File.join(SPEC_TMP_DIR, "data") }
+  config["local_db"] = File.join("sqlite3:", SPEC_TMP_DIR, "mysql_node.db")
+  ENV["WORKER_CONFIG"] = Yajl::Encoder.encode(config)
+  config
+end
+
 def new_node(options)
   opts = options.dup
   opts[:not_start_instances] = true if opts[:use_warden]
   VCAP::Services::Mysql::Node.new(opts)
+end
+
+def start_redis
+  redis_options = {
+    "daemonize"     => 'yes',
+    "pidfile"       => REDIS_PID,
+    "port"          => get_worker_config["resque"]["port"],
+    "timeout"       => 300,
+    "dbfilename"    => "dump.rdb",
+    "dir"           => REDIS_CACHE_PATH,
+    "loglevel"      => "debug",
+    "logfile"       => "stdout"
+  }.map { |k, v| "#{k} #{v}" }.join("\n")
+  `echo '#{redis_options}' | redis-server -`
+end
+
+def stop_redis
+  %x{
+    cat #{REDIS_PID} | xargs kill -QUIT
+    rm -rf #{REDIS_CACHE_PATH}
+  }
 end

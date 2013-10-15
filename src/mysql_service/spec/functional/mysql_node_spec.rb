@@ -136,6 +136,8 @@ describe "Mysql server node" do
         table_size.should be > 0
         # should also calculate index size
         conn.query("CREATE INDEX id_index on test(id)")
+        # force table status update
+        conn.query("analyze table test")
         all_size = @node.dbs_size(conn)[@db["name"]]
         all_size.should > table_size
       end
@@ -163,6 +165,10 @@ describe "Mysql server node" do
           content = (0..1022).map{ c[rand(c.size)] }.join
           conn.query("insert into test value('#{content}')")
         end
+        # force table status update
+        conn.close
+        conn = connect_to_mysql(binding)
+        conn.query("analyze table test")
 
         EM.add_timer(3) do
           expect {conn.query('SELECT 1')}.to raise_error
@@ -591,7 +597,9 @@ describe "Mysql server node" do
       host, port = %w(host port).map{|key| db[key]} if @node.use_warden
       tmp_file = "/tmp/#{db['name']}.sql.gz"
       @tmpfiles << tmp_file
-      result = `mysqldump -h #{host} -P #{port} --user='#{user}' --password='#{password}' -R #{db['name']} | gzip > #{tmp_file}`
+      mysqldump_bin = @opts[:mysql][@default_version]["mysqldump_bin"]
+      result = `#{mysqldump_bin} -h #{host} -P #{port} --user='#{user}' --password='#{password}' -R #{db['name']} | gzip > #{tmp_file}`
+
       bind_conn.query("drop procedure myfunc")
       conn.query("drop table test")
       res = bind_conn.query("show procedure status")
