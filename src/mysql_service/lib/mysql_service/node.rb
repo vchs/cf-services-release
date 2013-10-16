@@ -710,6 +710,12 @@ class VCAP::Services::Mysql::Node
     res
   end
 
+  def get_instance_health(name)
+    instance = mysqlProvisionedService.get(name)
+    health = instance.nil? ? 'fail' : get_status(instance)
+    { :health => health }
+  end
+
   def get_queries_status()
     total = 0
     each_connection do |connection|
