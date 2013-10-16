@@ -9,6 +9,11 @@ module ServicesHealthManager
     def logger
       @logger ||= Steno.logger("svc_hm")
     end
+
+    def now
+      Time.now.to_i
+    end
+
   end
 end
 
