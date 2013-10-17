@@ -10,10 +10,22 @@ module ServicesHealthManager
       m
     end
 
-    it "should process heartbeat message" do
+    it "should listen to heartbeat channel" do
       health = {test: 123}
       manager.should_receive(:process_heartbeat).with(health)
       message_bus.publish(Common::CHAN_HEARTBEAT, health)
     end
+
+
+    it "should process heartbeat successfully" do
+      NODE_ID = '123'
+      message = { node_id: NODE_ID, node_type: '1', node_ip: '1.2.3.4', instances: { '1' => { health: 'ok'} } }
+      manager.process_heartbeat(message)
+      actual = manager.get_instance('1').actual_topology
+      actual[NODE_ID].alive?.should be_true
+    end
+
+
+
   end
 end
