@@ -1,0 +1,5 @@
+check process svc_hm
+  with pidfile /var/vcap/sys/run/svc_hm/svc_hm.pid
+  start program "/var/vcap/jobs/svc_hm/bin/svc_hm_ctl start"
+  stop program "/var/vcap/jobs/svc_hm/bin/svc_hm_ctl stop"
+  group vcap

@@ -1,0 +1,9 @@
+---
+name: svc_hm
+dependencies:
+- ruby_next
+files:
+- svc_hm/Gemfile*
+- svc_hm/bin/*
+- svc_hm/lib/**/*
+- pkg_utils/*

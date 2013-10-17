@@ -1,0 +1,9 @@
+---
+mbus: nats://<%= properties.nats.user %>:<%= properties.nats.password %>@<%= properties.nats.address %>:<%= properties.nats.port %>
+pid: /var/vcap/sys/run/svc_hm/svc_hm.pid
+logging:
+  file: /var/vcap/sys/log/svc_hm/svc_hm.log
+  <% if properties.syslog_aggregator %>
+  syslog: vcap.svc_hm
+  <% end %>
+  level: debug

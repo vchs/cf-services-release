@@ -1,0 +1,48 @@
+#!/bin/bash
+
+PACKAGE_DIR=/var/vcap/packages/svc_hm
+JOB_DIR=/var/vcap/jobs/svc_hm
+CONF_DIR=$JOB_DIR/config
+RUN_DIR=/var/vcap/sys/run/svc_hm
+LOG_DIR=/var/vcap/sys/log/svc_hm
+PIDFILE=$RUN_DIR/svc_hm.pid
+
+export PATH=/var/vcap/packages/ruby_next/bin:$PATH
+
+source /var/vcap/packages/common/utils.sh
+
+case $1 in
+  start)
+    pid_guard $PIDFILE "svc_hm"
+
+    mkdir -p $RUN_DIR
+    mkdir -p $LOG_DIR
+
+    chown vcap:vcap $RUN_DIR
+    chown vcap:vcap $LOG_DIR
+
+    echo $$ > $PIDFILE
+    chown vcap:vcap $PIDFILE
+
+    <% if properties.syslog_aggregator %>
+    /var/vcap/packages/syslog_aggregator/setup_syslog_forwarder.sh $CONF_DIR
+    <% end %>
+
+    exec chpst -u vcap:vcap $PACKAGE_DIR/svc_hm/bin/svc_hm \
+         -c $JOB_DIR/config/svc_hm.yml \
+         >>$LOG_DIR/svc_hm.stdout.log \
+         2>>$LOG_DIR/svc_hm.stderr.log
+
+    ;;
+
+  stop)
+    kill_and_wait $PIDFILE
+
+    ;;
+
+  *)
+    echo "Usage: svc_hm_ctl {start|stop}"
+
+    ;;
+
+esac
