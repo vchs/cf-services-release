@@ -1,0 +1,11 @@
+---
+name: svc_hm
+templates:
+  syslog_forwarder.conf.erb: config/syslog_forwarder.conf
+  svc_hm.yml.erb: config/svc_hm.yml
+  svc_hm_ctl: bin/svc_hm_ctl
+packages:
+  - svc_hm
+  - common
+  - ruby_next
+  - syslog_aggregator
