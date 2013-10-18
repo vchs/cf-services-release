@@ -48,3 +48,6 @@ packages:
   - ruby_next
   - sqlite
   - syslog_aggregator
+  - perl
+  - dbd_mysql
+  - mysql_xtrabackup
