@@ -22,8 +22,25 @@ version_configs = {
     'port'        => 3307,
     'socket'      => '/var/vcap/sys/run/mysqld/mysqld55.sock',
     'binary_dir'  => '/var/vcap/packages/mysql55/bin',
+  },
+
+  '5.6' => {
+    'port'        => 3308,
+    'socket'      => '/var/vcap/sys/run/mysqld/mysqld56.sock',
+    'binary_dir'  => '/var/vcap/packages/mysql56/bin',
   }
 }
+
+if use_warden
+  version_configs.each do |k, v|
+    v['datadir'] = '/var/vcap/store/mysql'
+  end
+else
+  data_dir_suffix = {'5.1' => '', '5.5' => '55', '5.6' => '56'}
+  version_configs.each do |k, v|
+    v['datadir'] = "/var/vcap/store/mysql#{data_dir_suffix[k]}"
+  end
+end
 %>
 <% if lifecycle and lifecycle.resque %>
 <% snapshot_dir = lifecycle.mount_point || "/var/vcap/services_snapshot" %>
@@ -51,7 +68,7 @@ serialization:
   max_download_size_mb: <%= properties.service_lifecycle.serialization_max_download_size || 10 %>
 # addtional options
 mysql:
-<% for version in supported_versions %>
+<% supported_versions.each do |version| %>
   <%= version %>:
     host: localhost
     port: <%= version_configs[version]['port'] %>
@@ -65,4 +82,24 @@ gzip_bin: /bin/gzip
 <% if use_warden %>
 use_warden: true
 <% end %>
+<%
+  fog = lifecycle.fog
+  fog.instance_eval("def fields; @table.keys; end;")
+%>
+fog:
+<% fog.fields.each do |field| %>
+  <%= field %>: <%= fog.send(field) %>
+<% end %>
+mysqld:
+<% supported_versions.each do |version| %>
+  <%= version %>:
+    datadir: <%= version_configs[version]['datadir'] %>
+    innodb_file_per_table: 1
+    innodb_log_file_size: 5M
+    innodb_autoextend_increment: 8
+<% end %>
+backup:
+  perl_bin: /var/vcap/packages/perl/bin
+  xtrabackup_bin: /var/vcap/packages/mysql_xtrabackup/bin
+  dbd_mysql_lib: /var/vcap/packages/dbd_mysql/lib/perl5/x86_64-linux/
 <% end %>
