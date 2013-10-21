@@ -4,6 +4,7 @@ gem 'rake'
 gem 'eventmachine', '~> 1.0.0'
 gem 'cf-message-bus'
 gem 'yajl-ruby'
+gem 'state_machine'
 
 gem 'steno', '~> 1.2.0', :git => 'https://github.com/cloudfoundry/steno.git'
 gem 'vcap_common', :git => 'https://github.com/cloudfoundry/vcap-common.git', :ref => '658be8a8f6'
@@ -12,4 +13,7 @@ gem 'vcap_logging', :require => ['vcap/logging'], :git => 'https://github.com/cl
 
 group :test do
   gem 'rspec'
+  gem 'pry'
+  gem 'pry-debugger'
+  gem 'ruby-graphviz'
 end
