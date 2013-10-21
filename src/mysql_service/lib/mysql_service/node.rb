@@ -712,8 +712,8 @@ class VCAP::Services::Mysql::Node
 
   def get_instance_health(name)
     instance = mysqlProvisionedService.get(name)
-    health = instance.nil? ? 'fail' : get_status(instance)
-    { :health => health }
+    health = instance.nil? ? { :health => 'fail' } : instance.health
+    health.merge(:heartbeat_time => Time.now)
   end
 
   def get_queries_status()
@@ -970,8 +970,7 @@ class VCAP::Services::Mysql::Node::WardenProvisionedService
     true
   end
 
-  def running?
-    res = true
+  def health(running_check_only = false)
     host = self[:ip]
     ins_user = self[:user]
     ins_pass = self[:password]
@@ -983,7 +982,8 @@ class VCAP::Services::Mysql::Node::WardenProvisionedService
     socket = mysql_configs["socket"]
 
     begin
-      mysql_status(
+      addInfo = {}
+      health = mysql_status(
         :host => host,
         :ins_user => ins_user,
         :ins_pass => ins_pass,
@@ -991,12 +991,31 @@ class VCAP::Services::Mysql::Node::WardenProvisionedService
         :root_pass => root_pass,
         :db => db,
         :port => port,
-        :socket => socket,
-      )
+        :socket => socket
+      ) do |conn|
+        if running_check_only
+          conn.query("SHOW TABLES")
+        else
+          slave_status = conn.query("SHOW SLAVE STATUS").try(:first)
+          # now always return false, need real test against a cluster
+          if slave_status.is_a?(Hash) && slave_status.has_key?('Slave_IO_Running') && slave_status.has_key?('Master_Host')
+            addInfo[:role] = 'slave'
+            addInfo[:master] = slave_status['Master_Host']
+            addInfo[:seconds_behind] = slave_status['Seconds_Behind_Master'].to_i
+          else
+            addInfo[:role] = 'master'
+          end
+        end
+      end
+      { health: health }.merge(addInfo)
     rescue
-      res = false
+      { health: 'fail' }
     end
-
-    res
   end
+
+  def running?
+    health(true)[:health].eql?('ok')
+  end
+
+
 end
