@@ -1,5 +1,6 @@
 mbus: nats://localhost:4222
 logging:
-  level: info
+  file: /tmp/svc_hm.log
+  level: debug
 
 #pid: /var/vcap/sys/run/svc_hm.pid
