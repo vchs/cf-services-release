@@ -4,6 +4,7 @@ $LOAD_PATH.unshift File.join(File.dirname(__FILE__), '..', 'lib')
 require 'rubygems'
 require 'bundler/setup'
 require 'rspec'
+require 'pry'
 require 'svc_hm'
 require 'cf_message_bus/mock_message_bus'
 
