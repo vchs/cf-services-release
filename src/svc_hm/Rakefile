@@ -1,4 +1,11 @@
+$LOAD_PATH.unshift(File.join(File.dirname(__FILE__), 'lib'))
 require 'rspec/core/rake_task'
+require 'tasks/state_machine'
+require 'svc_hm'
 
 task :default => [:spec]
 RSpec::Core::RakeTask.new(:spec)
+
+# To create graph of state machine of Peer class
+# rake state_machine:draw CLASS=ServicesHealthManager::Peer
+# PS: this task requires graphviz library(sudo apt-get install graphviz)

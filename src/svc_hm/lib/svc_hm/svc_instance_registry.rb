@@ -1,4 +1,3 @@
-require 'svc_hm/svc_instance'
 module ServicesHealthManager
   class InstanceRegistry < Hash
     def get(id, option)

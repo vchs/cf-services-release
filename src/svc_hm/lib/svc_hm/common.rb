@@ -1,6 +1,11 @@
+require 'svc_hm/common'
+
 module ServicesHealthManager
   module Common
-    CHAN_HEARTBEAT = "svc.heartbeat"
+    CHAN_HEARTBEAT = "svc.heartbeat".freeze
+
+    TIMEOUT_PEER_LOST = 60
+
     @config = {}
     class << self
       attr_accessor :config

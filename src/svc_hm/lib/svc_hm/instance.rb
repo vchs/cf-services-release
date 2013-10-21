@@ -1,52 +1,7 @@
-require 'set'
-require 'svc_hm/svc_stateful_object'
 require 'svc_hm/common'
 require 'vcap_services_messages'
 
 module ServicesHealthManager
-  #this class provides info about every single entity running on a specific node
-  class Peer
-    include StatefulObject
-    include Common
-
-    TIMEOUT_PEER_LOST = 60
-
-    attr_reader  :state, :last_heartbeat_time
-    def initialize(option)
-      @option = option
-      @state = 'DOWN'
-    end
-
-    # Set down! usually when timeout threshold reached
-    def down!
-      @state = 'DOWN'
-    end
-
-    def receive_heartbeat(state)
-      @last_heartbeat_time = now
-      res = 0
-      if state.eql?('fail')
-        new_state = 'DOWN'
-        res = -1 if @state.eql?('RUNNING')
-      else
-        new_state = 'RUNNING'
-        res = 1 unless @state.eql?('RUNNING')
-      end
-      @state = new_state
-
-      res
-    end
-
-    def alive?
-      running? && has_recent_heartbeat?
-    end
-
-    def has_recent_heartbeat?
-      !@last_heartbeat_time.nil? && !timestamp_older_than?(@last_heartbeat_time, @option[:timeout] || TIMEOUT_PEER_LOST)
-    end
-
-  end
-
   #this class provides answers about Instance's State
   class Instance
     include Common
@@ -116,7 +71,7 @@ module ServicesHealthManager
         unhealthy_instance[:heartbeat_time] = now
         unhealthy_instance[:actual_states] = { :node_id => node_info[:node_id],
                                                  :health => state[:health]}
-        return "#{node_type}.health.remedy", unhealthy_instance
+        return "#{node_type}.health.alert", unhealthy_instance
       end
       return nil, nil
     end
