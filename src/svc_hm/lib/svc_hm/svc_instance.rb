@@ -1,6 +1,7 @@
 require 'set'
 require 'svc_hm/svc_stateful_object'
 require 'svc_hm/common'
+require 'vcap_services_base'
 
 module ServicesHealthManager
   #this class provides info about every single entity running on a specific node
@@ -105,7 +106,10 @@ module ServicesHealthManager
       delta = get_peer(node_info[:node_id]).receive_heartbeat(state[:health])
       #Hack here, just update the info to Gateway
       if delta > 0
-        return "#{node_type}.health.ok", { :instance => @id, :heartbeat_time => now }
+        req = VCAP::Services::Internal::InstanceHealthOK.new
+        req.instance_id = @id
+        req.heartbeat_time = now.to_s
+        return "#{node_type}.health.ok", req.encode
       elsif delta < 0
         unhealthy_instance = {}
         unhealthy_instance[:instance_id] = @id

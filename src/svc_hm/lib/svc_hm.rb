@@ -53,6 +53,7 @@ module ServicesHealthManager
     def process_heartbeat(message)
       # TODO process heartbeat
       logger.info("Receive HeartBeat: #{message}")
+      message = VCAP.symbolize_keys(message)
 
       node_hash = {}
       node_hash[:node_type] = message[:node_type]
