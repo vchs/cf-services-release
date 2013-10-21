@@ -154,9 +154,12 @@ class VCAP::Services::Mysql::Node
 
   def announcement
     @capacity_lock.synchronize do
-      {:available_capacity => @capacity,
+      {
+        :available_capacity => @capacity,
         :max_capacity => @max_capacity,
-        :capacity_unit => capacity_unit}
+        :capacity_unit => capacity_unit,
+        :host => get_host
+      }
     end
   end
 
@@ -788,12 +791,13 @@ class VCAP::Services::Mysql::Node
   end
 
   def get_host
+    return @host if @host
     host = @mysql_configs.values.first['host']
     if ['localhost', '127.0.0.1'].include?(host)
-      super
-    else
-      host
+      host = super
     end
+    @host = host
+    @host
   end
 
   def each_connection
