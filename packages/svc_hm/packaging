@@ -5,5 +5,7 @@ cp -a * ${BOSH_INSTALL_TARGET}
 
 (
   cd ${BOSH_INSTALL_TARGET}/svc_hm
-  /var/vcap/packages/ruby_next/bin/bundle install --local --deployment
+  bundle_cmd=/var/vcap/packages/ruby_next/bin/bundle
+  $bundle_cmd config build.do_sqlite3 --with-sqlite3-dir=/var/vcap/packages/sqlite
+  $bundle_cmd install --local --deployment
 )
