@@ -23,7 +23,7 @@ module VCAP
           "#{e}: [#{e.backtrace.join(" | ")}]"
         end
 
-        def mysql_status(opts={})
+        def mysql_status(opts={}, &block)
           res = "ok"
           begin
             begin
@@ -49,7 +49,11 @@ module VCAP
               )
               res = "password-modified"
             end
-            conn.query("SHOW TABLES")
+            if block_given?
+              block.yield(conn)
+            else
+              conn.query("SHOW TABLES")
+            end
           ensure
             begin
               conn.close if conn
