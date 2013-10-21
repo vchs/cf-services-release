@@ -822,6 +822,33 @@ describe "Mysql server node" do
     end
   end
 
+  it "should report instance health" do
+    EM.run do
+      instances_healths = @node.instances_health_details
+      instance = @db['name']
+      instances_healths.each do |name, value|
+        if name == instance.to_sym
+          value[:health].eql?('ok').should be_true
+          value[:role].eql?('master').should be_true
+        end
+      end
+      @node.fetch_pool(instance).with_connection do |connection|
+        connection.query("Drop database #{instance}")
+        sleep 1
+        instances_healths = @node.instances_health_details
+        instances_healths.each do |name, value|
+          if name == instance.to_sym
+            value[:health].eql?('fail').should be_true
+          end
+        end
+        # restore db so cleanup code doesn't complain.
+        connection.query("create database #{instance}")
+      end
+      EM.stop
+    end
+  end
+
+
   it "should report instance status in varz" do
     EM.run do
       varz = @node.varz_details()
