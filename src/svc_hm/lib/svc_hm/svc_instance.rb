@@ -1,7 +1,7 @@
 require 'set'
 require 'svc_hm/svc_stateful_object'
 require 'svc_hm/common'
-require 'vcap_services_base'
+require 'vcap_services_messages'
 
 module ServicesHealthManager
   #this class provides info about every single entity running on a specific node
