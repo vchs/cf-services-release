@@ -2,7 +2,6 @@
 name: svc_hm
 dependencies:
 - ruby_next
-- sqlite
 files:
 - svc_hm/Gemfile*
 - svc_hm/bin/*
