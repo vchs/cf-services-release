@@ -1,10 +1,18 @@
 require 'rspec/core/rake_task'
+require 'ci/reporter/rake/rspec'
 
-RSpec::Core::RakeTask.new(:spec) do |t|
+RSpec::Core::RakeTask.new("spec") do |t|
   t.pattern = [
     'spec/unit/**/*_spec.rb',
     'spec/functional/**/*_spec.rb'
   ]
 end
+
+RSpec::Core::RakeTask.new("spec:unit") do |t|
+  t.pattern = [
+    'spec/unit/**/*_spec.rb',
+  ]
+end
+
 
 task :default => :spec
