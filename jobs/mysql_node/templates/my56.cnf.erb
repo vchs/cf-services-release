@@ -54,6 +54,8 @@ innodb_file_per_table   = 1
 <% if innodb_open_files %>
 innodb_open_files       = <%= innodb_open_files %>
 <% end %>
+innodb_log_file_size    = 5M
+innodb_autoextend_increment = 8
 
 [mysqldump]
 quick
