@@ -26,6 +26,8 @@ describe VCAP::Services::Mysql::Provisioner do
         config["version"].should eq(version)
         config["peers"]["active"].should be
         config["peers"]["active"]["credentials"]["node_id"].should == "node1"
+
+        config["backup_peer"].should == "node1"
         credentials["name"].should == service_id
         credentials["node_id"].should == "node1"
         credentials["port"].should == VCAP::Services::Mysql::Provisioner::DEFAULT_PORTS_RANGE.first
