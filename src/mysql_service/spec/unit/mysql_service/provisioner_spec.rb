@@ -11,17 +11,19 @@ describe VCAP::Services::Mysql::Provisioner do
     context "for single node topology" do
       it "generates a valid recipes" do
         service_id = subject.generate_service_id
+        version = "5.6"
         best_nodes = [{
           "id" => "node1",
           "host" => "192.168.1.1"
         }]
-        recipes = subject.generate_recipes(service_id, {}, best_nodes)
+        recipes = subject.generate_recipes(service_id, {}, version, best_nodes)
         config = recipes["configuration"]
         config.should be
         credentials = recipes["credentials"]
         credentials.should be
 
         config["peers"].should be
+        config["version"].should eq(version)
         config["peers"]["active"].should be
         config["peers"]["active"]["credentials"]["node_id"].should == "node1"
         credentials["name"].should == service_id

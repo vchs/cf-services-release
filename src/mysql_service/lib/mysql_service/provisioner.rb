@@ -90,7 +90,7 @@ class VCAP::Services::Mysql::Provisioner < VCAP::Services::Base::Provisioner
     DEFAULT_PORTS_RANGE
   end
 
-  def generate_recipes(service_id, plan_config, best_nodes)
+  def generate_recipes(service_id, plan_config, version, best_nodes)
     recipes = {}
     credentials = {}
     configurations = {}
@@ -106,6 +106,7 @@ class VCAP::Services::Mysql::Provisioner < VCAP::Services::Base::Provisioner
     )
     credentials = active_creds
     configurations = {
+      "version" => version,
       "peers" => {
         "active" => {
           "credentials" => credentials
