@@ -12,11 +12,12 @@ describe VCAP::Services::Mysql::Provisioner do
       it "generates a valid recipes" do
         service_id = subject.generate_service_id
         version = "5.6"
+        plan = "free"
         best_nodes = [{
           "id" => "node1",
           "host" => "192.168.1.1"
         }]
-        recipes = subject.generate_recipes(service_id, {}, version, best_nodes)
+        recipes = subject.generate_recipes(service_id, {plan.to_sym => {}}, version, best_nodes)
         config = recipes["configuration"]
         config.should be
         credentials = recipes["credentials"]
@@ -24,8 +25,11 @@ describe VCAP::Services::Mysql::Provisioner do
 
         config["peers"].should be
         config["version"].should eq(version)
+        config["plan"].should eq(plan)
         config["peers"]["active"].should be
         config["peers"]["active"]["credentials"]["node_id"].should == "node1"
+
+        config["backup_peer"].should == "node1"
         credentials["name"].should == service_id
         credentials["node_id"].should == "node1"
         credentials["port"].should == VCAP::Services::Mysql::Provisioner::DEFAULT_PORTS_RANGE.first

@@ -133,7 +133,10 @@ plan_management:
         snapshot:
           quota: <%= opts.snapshot.quota || 0 %>
       <% end %>
-      <% if opts.serialization || opts.snapshot %>
+      <% if opts.backup %>
+        backup: <%= opts.backup || "disable" %>
+      <% end %>
+      <% if opts.serialization || opts.snapshot || opts.backup %>
         job: enable
       <% end %>
     <% end %>

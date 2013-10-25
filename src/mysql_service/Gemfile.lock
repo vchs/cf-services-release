@@ -39,8 +39,8 @@ GIT
 
 GIT
   remote: https://github.com/vchs/vcap-services-base.git
-  revision: 6feebb7153a38607fc82f4237bb2f043a143a02e
-  ref: 6feebb71
+  revision: 676d6d527523e17c99b64969f004b41679c24084
+  ref: 676d6d5275
   specs:
     vcap_services_base (0.1.17)
       cf-uaa-lib
@@ -54,7 +54,7 @@ GIT
       json
       nats (>= 0.4.22.beta.8, < 0.4.28)
       resque (~> 1.20)
-      resque-status
+      resque-status (~> 0.4.1)
       ruby-hmac (~> 0.4.0)
       rubyzip (~> 0.9.8)
       sinatra (>= 1.2.3)
