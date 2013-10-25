@@ -39,8 +39,8 @@ GIT
 
 GIT
   remote: https://github.com/vchs/vcap-services-base.git
-  revision: 19bbb631cc7090bfc7e91ca59baedef57e510646
-  ref: 19bbb631cc
+  revision: 6feebb7153a38607fc82f4237bb2f043a143a02e
+  ref: 6feebb71
   specs:
     vcap_services_base (0.1.17)
       cf-uaa-lib
@@ -202,7 +202,7 @@ GEM
     json_pure (1.8.0)
     membrane (0.0.2)
     mime-types (1.23)
-    mini_portile (0.5.1)
+    mini_portile (0.5.2)
     mono_logger (1.1.0)
     msgpack (0.5.5)
     multi_json (1.7.6)
