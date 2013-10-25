@@ -40,6 +40,10 @@ class VCAP::Services::Mysql::Provisioner < VCAP::Services::Base::Provisioner
     VCAP::Services::Mysql::Serialization::ImportFromURLJob
   end
 
+  def create_backup_job
+    VCAP::Services::Mysql::Backup::CreateBackupJob
+  end
+
   def varz_details
     varz = super
 
@@ -90,7 +94,7 @@ class VCAP::Services::Mysql::Provisioner < VCAP::Services::Base::Provisioner
     DEFAULT_PORTS_RANGE
   end
 
-  def generate_recipes(service_id, plan_config, version, best_nodes)
+  def generate_recipes(service_id, plan_config, plan, version, best_nodes)
     recipes = {}
     credentials = {}
     configurations = {}
@@ -107,6 +111,7 @@ class VCAP::Services::Mysql::Provisioner < VCAP::Services::Base::Provisioner
     credentials = active_creds
     configurations = {
       "version" => version,
+      "plan" => plan,
       "peers" => {
         "active" => {
           "credentials" => credentials
@@ -127,6 +132,8 @@ class VCAP::Services::Mysql::Provisioner < VCAP::Services::Base::Provisioner
       credentials["peers"]["passive"] ||= []
       credentials["peers"]["passive"] << { "credentials" => credentials }
     end
+
+    configurations["backup_peer"] = get_backup_peer(credentials)
 
     recipes = {
       "credentials" => credentials,
@@ -177,6 +184,16 @@ class VCAP::Services::Mysql::Provisioner < VCAP::Services::Base::Provisioner
     end
   end
 
+  def user_triggered_options(params)
+    type = params["type"] || "full"
+    {:type => type}
+  end
+
+  def periodically_triggered_options(params)
+    type = params["type"] || "incremental"
+    {:type => type}
+  end
+
   private
 
   def parse_node_ports(handle)
@@ -203,5 +220,13 @@ class VCAP::Services::Mysql::Provisioner < VCAP::Services::Base::Provisioner
 
     uri = URI::Generic.new(scheme, credentials, host, port, nil, path, nil, nil, nil)
     uri.to_s
+  end
+
+  def get_backup_peer(credentials)
+    if credentials && credentials["peers"] && passives = credentials["peers"]["passive"]
+      passives[0]["node_id"] if passives.size > 0
+    else
+      credentials["node_id"]
+    end
   end
 end
