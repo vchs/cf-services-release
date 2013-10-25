@@ -139,3 +139,8 @@ mysql/mysql-initdb-5.6.13-linux-glibc2.5-x86_64.tar.gz:
   sha: !binary |-
     MmMzODM0NjAyMTI4NDkwMmE5ZDJhYjE4M2MwYjBjNWJmZjMyODU1OQ==
   size: 270476
+redis/redis-2.6.16.tar.gz:
+  object_id: 081fa20d-7f8f-4f2e-b8ee-9914dd0b72a6
+  sha: !binary |-
+    Zjk0YzBmNjIzYWFhOGMzMTBmOWJlMmE4OGU4MTcxNmRlMDFjZTBjZQ==
+  size: 999579
