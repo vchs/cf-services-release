@@ -10,3 +10,6 @@
 [submodule "src/mysql_service/vendor/integration-test-support"]
   path = src/mysql_service/vendor/integration-test-support
   url = https://github.com/cloudfoundry/integration-test-support.git
+[submodule "src/mssql_service/vendor/integration-test-support"]
+	path = src/mssql_service/vendor/integration-test-support
+	url = https://github.com/Chunjie/integration-test-support.git
