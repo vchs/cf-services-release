@@ -1,0 +1,49 @@
+---
+cloud_controller_uri: http://localhost:9292
+
+service:
+  name: mssql
+  unique_id: 0F9EDCF6-DC10-4AC3-98D7-862CA1D67AB3  
+  provider: core
+  provider_name: 'Core'
+  version: "MSSQLSERVER2008R2"
+  supported_versions: ["MSSQLSERVER2008R2"]
+  description: 'SQLServer database'
+  plans: ['free']
+  default_plan: free
+  version_aliases:
+    current: "MSSQLSERVER2008R2"
+  tags: ['relational']
+  timeout: 10
+ip_route: localhost
+
+cc_api_version: scv1
+gateway_name: "MSSQL (Core) Gateway"
+uaa_client_id: "service_gateway"
+uaa_endpoint: http://uaa.dev8.sin2.beefstall.info
+uaa_client_auth_credentials:
+  username: "admin@tempest.example.com"
+  password: "password"
+service_auth_tokens:
+  mssql_core: ""
+token: ""
+
+
+index: 0
+logging:
+  level: debug
+mbus: nats://windows:windows@192.168.56.30:4242
+pid: /var/vcap/sys/run/mssql_service.pid
+node_timeout: 8
+
+plan_management:
+  plans:
+    free:
+      low_water: 10
+      high_water: 180
+
+
+# z_interval: 30
+# check_orphan_interval: 3600
+# double_check_orphan_interval: 300
+provisioner_version: v3
