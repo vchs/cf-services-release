@@ -1,0 +1,8 @@
+---
+name: service_controller
+dependencies:
+- ruby_next
+- sqlite
+files:
+- service_controller/**/*
+- pkg_utils/*

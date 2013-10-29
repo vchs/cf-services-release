@@ -1,0 +1,42 @@
+#!/bin/bash
+
+PACKAGE_DIR=/var/vcap/packages/service_controller
+JOB_DIR=/var/vcap/jobs/service_controller
+CONF_DIR=$JOB_DIR/config
+RUN_DIR=/var/vcap/sys/run/service_controller
+LOG_DIR=/var/vcap/sys/log/service_controller
+PIDFILE=$RUN_DIR/service_controller.pid
+
+export PATH=/var/vcap/packages/ruby_next/bin:$PATH
+export SERVICE_CONTROLLER_CONFIG=$CONF_DIR/service_controller.yml
+
+source /var/vcap/packages/common/utils.sh
+
+case $1 in
+  start)
+    pid_guard $PIDFILE "service_controller"
+
+    mkdir -p $RUN_DIR
+    mkdir -p $LOG_DIR
+
+    echo $$ > $PIDFILE
+
+    cd $PACKAGE_DIR/service_controller/
+    bundle exec rake db:migrate
+    exec bundle exec rails server \
+         >>$LOG_DIR/service_controller.stdout.log \
+         2>>$LOG_DIR/service_controller.stderr.log
+
+    ;;
+
+  stop)
+    kill_and_wait $PIDFILE
+
+    ;;
+
+  *)
+    echo "Usage: service_controller_ctl {start|stop}"
+
+    ;;
+
+esac

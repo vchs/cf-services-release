@@ -1,0 +1,5 @@
+check process service_controller
+  with pidfile /var/vcap/sys/run/service_controller/service_controller.pid
+  start program "/var/vcap/jobs/service_controller/bin/service_controller_ctl start"
+  stop program "/var/vcap/jobs/service_controller/bin/service_controller_ctl stop"
+  group vcap
