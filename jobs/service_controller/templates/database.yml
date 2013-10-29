@@ -1,0 +1,18 @@
+
+development:
+  adapter: sqlite3
+  database: /var/vcap/data/service_controller/development.sqlite3
+  pool: 5
+  timeout: 5000
+
+test:
+  adapter: sqlite3
+  database: /var/vcap/data/service_controller/test.sqlite3
+  pool: 5
+  timeout: 5000
+
+production:
+  adapter: sqlite3
+  database: /var/vcap/data/service_controller/production.sqlite3
+  pool: 5
+  timeout: 5000
