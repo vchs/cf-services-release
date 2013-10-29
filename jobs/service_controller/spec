@@ -1,0 +1,13 @@
+---
+name: service_controller
+templates:
+  service_controller.yml.erb: config/service_controller.yml
+  database.yml: config/database.yml
+  service_controller_ctl: bin/service_controller_ctl
+  cf-registrar_ctl: bin/cf-registrar_ctl
+  cf-registrar.config.yml.erb: config/cf-registrar/config.yml
+  varz.yml.erb: config/varz.yml
+packages:
+  - service_controller
+  - common
+  - ruby_next

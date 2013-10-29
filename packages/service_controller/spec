@@ -1,0 +1,9 @@
+---
+name: service_controller
+dependencies:
+- ruby_next
+- sqlite
+files:
+- service_controller/**/*
+- vcap-common/**/*
+- pkg_utils/*

@@ -1,0 +1,11 @@
+check process service_controller
+  with pidfile /var/vcap/sys/run/service_controller/service_controller.pid
+  start program "/var/vcap/jobs/service_controller/bin/service_controller_ctl start"
+  stop program "/var/vcap/jobs/service_controller/bin/service_controller_ctl stop"
+  group vcap
+
+check process service_controller_cf-registrar
+  with pidfile /var/vcap/sys/run/service_controller/cf-registrar.pid
+  start program "/var/vcap/jobs/service_controller/bin/cf-registrar_ctl start"
+  stop program "/var/vcap/jobs/service_controller/bin/cf-registrar_ctl stop"
+  group vcap
