@@ -82,7 +82,7 @@ ip_route: <%= gateway.ip_route %>
 
 cc_api_version: <%= cc_api_version %>
 
-<% if cc_api_version == "v2" %>
+<% unless cc_api_version == "v1" %>
 gateway_name: "Mysql (Core) Gateway"
 uaa_client_id: <%= properties.uaa_client_id || "vmc" %>
 uaa_endpoint: <%= properties.uaa_endpoint %>

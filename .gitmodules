@@ -10,3 +10,6 @@
 [submodule "src/mysql_service/vendor/integration-test-support"]
   path = src/mysql_service/vendor/integration-test-support
   url = https://github.com/cloudfoundry/integration-test-support.git
+[submodule "src/service_controller"]
+	path = src/service_controller
+	url = https://github.com/vchs/service_controller.git
