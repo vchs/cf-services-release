@@ -1,0 +1,17 @@
+---
+logging:
+  file: /var/vcap/sys/log/service_controller/cf-registrar.log
+  <% if properties.syslog_aggregator %>
+  syslog: vcap.service_controller_cf-registrar
+  <% end %>
+  level: info
+mbus: nats://<%= properties.nats.user %>:<%= properties.nats.password %>@<%= properties.nats.address %>:<%= properties.nats.port %>
+uri:
+  - sc.<%= properties.domain %>
+host: <%= spec.networks.send(properties.networks.apps).ip %>
+index: <%= spec.index %>
+port: 3000
+tags:
+  component: service_controller
+varz:
+  file: /var/vcap/jobs/service_controller/config/varz.yml
