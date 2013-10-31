@@ -23,7 +23,10 @@ class MssqlRunner < ComponentRunner
           # Failed to add auth token, likely due to duplicate
         end
 
-        #TODO: start mssql node process
+        add_pid Process.spawn(
+          "bundle exec bin/mssql_node -c #{config.node_file_location}",
+          log_options(:mssql_node)
+        )
 
         sleep 5
       end
@@ -42,8 +45,16 @@ class MssqlRunner < ComponentRunner
       "#{runner.tmp_dir}/config/mssql_gateway.yml"
     end
 
+    def node_file_location
+      "#{runner.tmp_dir}/config/mssql_node.yml"
+    end
+
     def gateway_config_hash
       YAML.load_file(gateway_file_location)
+    end
+
+    def node_config_hash
+      YAML.load_file(node_file_location)
     end
 
     private
@@ -52,15 +63,21 @@ class MssqlRunner < ComponentRunner
       YAML.load_file(runner.asset("mssql_gateway.yml"))
     end
 
+    def base_node_config_hash
+      YAML.load_file(runner.asset("mssql_node.yml"))
+    end
+
     def write_custom_config(opts)
       FileUtils.mkdir_p("#{runner.tmp_dir}/config")
       gateway_config_hash = base_gateway_config_hash
+      node_config_hash = base_node_config_hash
       if opts
         gateway_config_hash['service']['name'] = opts[:service_name] if opts.has_key?(:service_name)
         gateway_config_hash['service']['provider'] = opts[:service_provider] if opts.has_key?(:service_provider)
         gateway_config_hash['service']['blurb'] = opts[:service_blurb] if opts.has_key?(:service_blurb)
         if opts.has_key?(:plan_name)
           gateway_config_hash['service']['plans'] = {opts.fetch(:plan_name) => base_gateway_config_hash.fetch('service').fetch('plans').values.first}
+          node_config_hash['plan'] = opts.fetch(:plan_name)
         end
         # ensure that the gateway has a key for the service
         gateway_config_hash['service_auth_tokens'] = {
@@ -69,6 +86,7 @@ class MssqlRunner < ComponentRunner
       end
 
       File.write(gateway_file_location, YAML.dump(gateway_config_hash))
+      File.write(node_file_location, YAML.dump(node_config_hash))
     end
   end
 
