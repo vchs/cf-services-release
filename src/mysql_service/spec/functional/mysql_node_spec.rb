@@ -197,6 +197,11 @@ describe "Mysql server node" do
                 conn.query("insert into test value('#{content}')")
               end
 
+              # force table status update
+              conn.close
+              conn = connect_to_mysql(binding)
+              conn.query("analyze table test")
+
               EM.add_timer(3) do
                 expect { conn.query('SELECT 1') }.to raise_error
                 conn.close
