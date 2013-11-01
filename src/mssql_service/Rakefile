@@ -10,7 +10,7 @@ end
 
 RSpec::Core::RakeTask.new("spec:unit") do |t|
   t.pattern = [
-    'spec/unit/*_spec.rb'
+    'spec/unit/**/*_spec.rb'
   ]
 end
 
