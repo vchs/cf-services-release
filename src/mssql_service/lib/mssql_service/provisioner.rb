@@ -49,6 +49,7 @@ class VCAP::Services::Mssql::Provisioner < VCAP::Services::Base::Provisioner
     credentials = active_node_credential
     configurations = {
       "version" => version,
+      "plan" => plan_config.keys[0].to_s,
       "peers" => {
         "active" => {
           "credentials" => credentials
@@ -70,6 +71,8 @@ class VCAP::Services::Mssql::Provisioner < VCAP::Services::Base::Provisioner
       configurations["peers"]["passive"] ||= []
       configurations["peers"]["passive"] << { "credentials" => passive_node_credential }
     end
+
+    configurations["backup_peer"] = get_backup_peer(credentials)
 
     recipes = {
       "credentials" => credentials,
@@ -144,6 +147,14 @@ private
 
     uri = URI::Generic.new(scheme, credentials, host, port, nil, path, nil, nil, nil)
     uri.to_s
+  end
+
+  def get_backup_peer(credentials)
+    if credentials && credentials["peers"] && passives = credentials["peers"]["passive"]
+      passives[0]["node_id"] if passives.size > 0
+    else
+      credentials["node_id"]
+    end
   end
 
 end

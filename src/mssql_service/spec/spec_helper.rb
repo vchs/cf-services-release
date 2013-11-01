@@ -22,3 +22,11 @@ end
 require "rubygems"
 require "rspec"
 require "bundler/setup"
+require "vcap_services_base"
+require "mssql_service/provisioner"
+
+def getLogger()
+  logger = Logger.new(STDOUT)
+  logger.level = Logger::ERROR
+  return logger
+end
