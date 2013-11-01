@@ -196,7 +196,8 @@ class VCAP::Services::Mysql::Provisioner < VCAP::Services::Base::Provisioner
   def parse_node_ports(handle)
     config = handle[:configuration]
     peers = config["peers"]
-    peers.each do |role, cred|
+    peers.each do |role, peer|
+      cred = peer["credentials"]
       node = cred["node_id"]
       port = cred["port"]
       yield node, port
