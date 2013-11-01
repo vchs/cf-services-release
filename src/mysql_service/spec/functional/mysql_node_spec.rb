@@ -967,6 +967,69 @@ describe "Mysql server node" do
     end
   end
 
+  it "should provision instance according to the provided credential" do
+    EM.run do
+      node = new_node(@opts)
+      creds = {
+        "name" => "testdbname",
+        "user" => "testuser",
+        "password" => "testpass",
+        "port" => 25555,
+      }
+      EM.add_timer(1) do
+        db = node.provision(@default_plan, creds, @default_version)
+        @test_dbs[db] = []
+        creds.keys.each do |k|
+          db[k].should eq creds[k]
+        end
+        EM.stop
+      end
+    end
+  end
+
+  it "should provision the instance and overwrite the instance with same port" do
+    EM.run do
+      node = new_node(@opts)
+      creds = {
+        "name" => "testdbname",
+        "user" => "testuser",
+        "password" => "testpass",
+        "port" => 25555,
+      }
+      EM.add_timer(1) do
+        db1 = node.provision(@default_plan, creds, @default_version)
+        creds["name"] = "testdbname2"
+        db2 = node.provision(@default_plan, creds, @default_version)
+        expect { conn = connect_to_mysql(db1) }.to raise_error
+        expect { conn = connect_to_mysql(db2) }.to_not raise_error
+        @test_dbs[db2] = []
+        creds.keys.each do |k|
+          db2[k].should eq creds[k]
+        end
+        EM.stop
+      end
+    end
+  end
+
+  it "should not provision instance if port can't be freed" do
+    EM.run do
+      node = new_node(@opts)
+      creds = {
+        "name" => "testdbname",
+        "user" => "testuser",
+        "password" => "testpass",
+        "port" => 25555,
+      }
+      EM.add_timer(1) do
+        node.new_port(creds["port"])
+        expect{ node.provision(@default_plan, creds, @default_version) }
+          .to raise_error(VCAP::Services::Base::Error::ServiceError,
+                          /port.*in use/)
+        EM.stop
+      end
+    end
+  end
+
   after :each do
     EM.run do
       @node.create_missing_pools if @node.use_warden

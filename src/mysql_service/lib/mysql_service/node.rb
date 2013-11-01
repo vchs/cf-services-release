@@ -298,6 +298,7 @@ class VCAP::Services::Mysql::Node
     raise ServiceError.new(ServiceError::UNSUPPORTED_VERSION, version) unless @supported_versions.include?(version)
 
     provisioned_service = nil
+    tried_free_port = false
     begin
       if credential
         name, user, password = %w(name user password).map { |key| credential[key] }
@@ -319,6 +320,17 @@ class VCAP::Services::Mysql::Node
       end
       return response
     rescue => e
+      if e.is_a?(ServiceError) && e.error_code == ServiceError::PORT_IN_USE[0]
+        raise if tried_free_port
+        port = credential["port"]
+        @logger.warn("Found an occupied port #{port}, " \
+                     "try to delete the instance with this port")
+        ids = mysqlProvisionedService.all(:port => port).map{ |ins| ins.name }
+        ids.each{ |id| unprovision(id, []) }
+        tried_free_port = true
+        retry
+      end
+
       handle_provision_exception(provisioned_service)
       raise e
     end
