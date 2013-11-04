@@ -19,3 +19,6 @@
 [submodule "src/mssql_service/vendor/integration-test-support"]
 	path = src/mssql_service/vendor/integration-test-support
 	url = https://github.com/Chunjie/integration-test-support.git
+[submodule "src/portal"]
+	path = src/portal
+	url = https://github.com/vchs/portal.git

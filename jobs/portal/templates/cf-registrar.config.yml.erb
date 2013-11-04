@@ -1,0 +1,17 @@
+---
+logging:
+  file: /var/vcap/sys/log/portal/cf-registrar.log
+  <% if properties.syslog_aggregator %>
+  syslog: vcap.portal_cf-registrar
+  <% end %>
+  level: info
+mbus: nats://<%= properties.nats.user %>:<%= properties.nats.password %>@<%= properties.nats.address %>:<%= properties.nats.port %>
+uri:
+  - sc.<%= properties.domain %>
+host: <%= spec.networks.send(properties.networks.apps).ip %>
+index: <%= spec.index %>
+port: 3000
+tags:
+  component: portal
+varz:
+  file: /var/vcap/jobs/portal/config/varz.yml

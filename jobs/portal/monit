@@ -1,0 +1,11 @@
+check process portal
+  with pidfile /var/vcap/sys/run/portal/portal.pid
+  start program "/var/vcap/jobs/portal/bin/portal_ctl start"
+  stop program "/var/vcap/jobs/portal/bin/portal_ctl stop"
+  group vcap
+
+check process portal_cf-registrar
+  with pidfile /var/vcap/sys/run/portal/cf-registrar.pid
+  start program "/var/vcap/jobs/portal/bin/cf-registrar_ctl start"
+  stop program "/var/vcap/jobs/portal/bin/cf-registrar_ctl stop"
+  group vcap

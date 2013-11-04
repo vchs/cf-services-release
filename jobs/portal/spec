@@ -1,0 +1,13 @@
+---
+name: portal
+templates:
+  portal.yml.erb: config/portal.yml
+  database.yml: config/database.yml
+  portal_ctl: bin/portal_ctl
+  cf-registrar_ctl: bin/cf-registrar_ctl
+  cf-registrar.config.yml.erb: config/cf-registrar/config.yml
+  varz.yml.erb: config/varz.yml
+packages:
+  - portal
+  - common
+  - ruby_next

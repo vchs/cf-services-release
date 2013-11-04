@@ -1,0 +1,8 @@
+---
+name: portal
+dependencies:
+- ruby_next
+files:
+- portal/**/*
+- vcap-common/**/*
+- pkg_utils/*
