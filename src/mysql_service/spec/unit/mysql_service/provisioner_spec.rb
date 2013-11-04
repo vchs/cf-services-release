@@ -54,14 +54,16 @@ describe VCAP::Services::Mysql::Provisioner do
           :configuration => {
             "peers" => {
               "active" => {
-                "node_id" => "node1",
-                "port" => 10001
+                "credentials" => {
+                  "node_id" => "node1",
+                  "port" => 10001
+                }
               }
             }
           }
         }
         subject.after_add_instance_handle(instance_handle)
-        expect{ subject.get_node_port("node1")}.to raise_error /No ports/
+        expect{ subject.get_node_port("node1")}.to raise_error(/No ports/)
 
         subject.after_delete_instance_handle(instance_handle)
         expect{ subject.get_node_port("node1")}.to_not raise_error
