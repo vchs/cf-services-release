@@ -18,6 +18,7 @@ nats_props = properties.send(nats_props_name)
 nats = "nats://#{nats_props.user}:#{nats_props.password}@#{nats_props.address}:#{nats_props.port}"
 lifecycle = properties.service_lifecycle
 cc_api_version = gateway.cc_api_version || "v1"
+provisioner_version = gateway.provisioner_version || "v3"
 %>
 index: <%= spec.index %>
 mbus: <%= nats %>
@@ -81,6 +82,7 @@ ip_route: <%= gateway.ip_route %>
 <% end %>
 
 cc_api_version: <%= cc_api_version %>
+provisioner_version: <%= cc_api_version %>
 
 <% if cc_api_version == "v2" %>
 gateway_name: "Mysql (Core) Gateway"
