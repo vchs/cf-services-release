@@ -15,7 +15,7 @@ gem "rake", "10.1.0"
 gem "curb", "~> 0.7.16"
 gem 'vcap_common', :require => ['vcap/common', 'vcap/component'], :git => 'https://github.com/cloudfoundry/vcap-common.git', :ref => '658be8a8f6'
 gem 'vcap_logging', :require => ['vcap/logging'], :git => 'https://github.com/cloudfoundry/common.git', :ref => 'b96ec1192'
-gem 'vcap_services_base', :git => 'https://github.com/vchs/vcap-services-base.git', :ref => '6feebb71'
+gem 'vcap_services_base', :git => 'https://github.com/vchs/vcap-services-base.git', :ref => '272c16f2da6'
 gem 'vcap_services_messages', :git => 'https://github.com/vchs/vcap-services-messages', :branch => 'master'
 
 group :test do
