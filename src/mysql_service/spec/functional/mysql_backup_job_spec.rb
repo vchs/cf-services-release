@@ -12,8 +12,8 @@ module VCAP::Services::Mysql::Backup
       pending "Redis not installed" unless $?.success?
       start_redis
 
-      config = Yajl::Parser.parse(ENV["WORKER_CONFIG"])
-      VCAP::Services::Base::AsyncJob::Config.redis_config = config["resque"]
+      @config = Yajl::Parser.parse(ENV["WORKER_CONFIG"])
+      VCAP::Services::Base::AsyncJob::Config.redis_config = @config["resque"]
       VCAP::Services::Base::AsyncJob::Config.logger = getLogger
 
       Resque.inline = true
@@ -53,7 +53,9 @@ module VCAP::Services::Mysql::Backup
     it "should be able to create full & incremental backup" do
       service_id = @db_instance.name
       ["full", "incremental"].each do |type|
+        backup_id = UUIDTools::UUID.random_create.to_s
         job_id = CreateBackupJob.create(:service_id => service_id,
+                                        :backup_id  => backup_id,
                                         :node_id    => @opts[:node_id],
                                         :metadata   => {:type => type}
                                        )
@@ -63,12 +65,50 @@ module VCAP::Services::Mysql::Backup
         instance_backup_info.values_at(:last_lsn, :last_backup).should_not include(nil)
 
         job_status = get_job(job_id)
-        backup_id = job_status[:result]["backup_id"]
+        backup_id.should eq job_status[:result]["backup_id"]
         single_backup_info = DBClient.get_single_backup_info(service_id, backup_id)
         single_backup_info.should_not be_nil
         single_backup_info.values_at(:backup_id, :type, :date, :manifest).should_not include(nil)
 
         StorageClient.get_file("mysql", service_id, backup_id).should_not be_nil
+      end
+    end
+
+    it "should be able to handle user triggered backup" do
+      service_id = @db_instance.name
+      service_name = @config["service_name"]
+      backup_id = UUIDTools::UUID.random_create.to_s
+      EM.run do
+        client = NATS.connect(:uri => @config["mbus"])
+        client.subscribe("#{service_name}.create_backup") do |msg, reply|
+          res = VCAP::Services::Internal::BackupJobResponse.decode(msg)
+          res.success.should eq true
+          res.status.should eq "completed"
+          res.backup_id.should eq backup_id
+          res.properties.should include("size", "date")
+          sr = VCAP::Services::Internal::SimpleResponse.new
+          sr.success = true
+          client.publish(reply, sr.encode)
+        end
+
+        job_id = CreateBackupJob.create(:service_id => service_id,
+                                        :backup_id  => backup_id,
+                                        :node_id    => @opts[:node_id],
+                                        :metadata   => {:type => "full", :trigger_by => "user"}
+                                       )
+
+
+        job_status = get_job(job_id)
+        backup_id.should eq job_status[:result]["backup_id"]
+        single_backup_info = DBClient.get_single_backup_info(service_id, backup_id)
+        single_backup_info.should be_nil
+
+        StorageClient.get_file("mysql", service_id, backup_id).should_not be_nil
+
+        EM.add_timer(10) do
+          fail "Error occurs during communication through nats"
+          EM.stop
+        end
       end
     end
   end

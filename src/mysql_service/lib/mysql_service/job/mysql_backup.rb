@@ -23,13 +23,14 @@ module VCAP::Services::Mysql::Backup
 
     def perform
       begin
-        required_options :service_id
+        required_options :service_id, :backup_id
         @name = options["service_id"]
+        @backup_id = options["backup_id"]
         @metadata = VCAP.symbolize_keys(options["metadata"])
         @type = @metadata[:type]
         @logger.info("Launch job: #{self.class} for #{name} with metadata: #{@metadata}")
+        @service_name = @config["service_name"]
 
-        @backup_id = UUIDTools::UUID.random_create.to_s
         @backup_files = []
         lock = create_lock
         lock.lock do
@@ -53,22 +54,32 @@ module VCAP::Services::Mysql::Backup
             package.add_files f
           end
           package.pack
+          @backup_files << package_file_path
           @logger.info("Package backup file #{File.join(dump_path, package_file)}")
+          File.open(package_file_path) { |f| backup[:single_backup][:size] = f.size }
           backup[:single_backup][:date] = fmt_time
 
-          StorageClient.store_file(@config["service_name"], name, backup_id, package_file_path)
-          DBClient.execute_as_transaction do
-            DBClient.set_instance_backup_info(name, backup[:instance_info])
-            DBClient.set_single_backup_info(name, backup_id, backup[:single_backup])
+          StorageClient.store_file(@service_name, name, backup_id, package_file_path)
+          if @metadata[:trigger_by] == "user"
+            response = filter_keys(backup[:single_backup]).delete_if { |k, v| k == :backup_id }
+            send_msg("#{@service_name}.create_backup",
+                     success_response(backup_id, response))
+          else
+            DBClient.execute_as_transaction do
+              DBClient.set_instance_backup_info(name, backup[:instance_info])
+              DBClient.set_single_backup_info(name, backup_id, backup[:single_backup])
+            end
           end
-
-          @backup_files << package_file_path
 
           completed(Yajl::Encoder.encode(filter_keys(backup[:single_backup])))
           @logger.info("Complete job: #{self.class} for #{name}")
         end
       rescue => e
-        handle_error(e)
+        err_msg = handle_error(e)
+        if @metadata[:trigger_by] == "user"
+          send_msg("#{@service_name}.backups.create",
+                   failed_response(backup_id, err_msg))
+        end
       ensure
         set_status({:complete_time => Time.now.to_s})
         @backup_files.each{|f| FileUtils.rm_rf(f, :secure => true) if File.exists? f} if @backup_files
@@ -101,10 +112,6 @@ module VCAP::Services::Mysql::Backup
       raise "Backup Error" unless result
       backup = {
         :files => result[:files],
-        :instance_info => {
-          :last_lsn => result[:last_lsn],
-          :last_backup => backup_id
-        },
         :single_backup => {
           :backup_id => backup_id,
           :type => @type,
@@ -112,10 +119,14 @@ module VCAP::Services::Mysql::Backup
             :version => 1,
             :service_version => srv.version
           }
-        },
+        }
       }
-      backup[:single_backup][:previous_bakcup] = backup_conf["last_bakcup"] if @type == "incremental"
-      backup[:instance_info][:node_id] = @config["node_id"] if @type == "full"
+      backup[:single_backup][:previous_backup] = backup_conf["last_backup"] if @type == "incremental"
+
+      backup[:instance_info] = {
+          :last_lsn => result[:last_lsn],
+          :last_backup => backup_id
+      } unless @metadata[:trigger_by] == "user"
 
       backup
     end
