@@ -41,12 +41,17 @@ else
     v['datadir'] = "/var/vcap/store/mysql#{data_dir_suffix[k]}"
   end
 end
+
+nats_props_name = properties.nats_props || "nats"
+nats_props = properties.send(nats_props_name)
+nats = "nats://#{nats_props.user}:#{nats_props.password}@#{nats_props.address}:#{nats_props.port}"
 %>
 <% if lifecycle and lifecycle.resque %>
 <% snapshot_dir = lifecycle.mount_point || "/var/vcap/services_snapshot" %>
 service_name: mysql
 snapshots_base_dir: <%= snapshot_dir %>
 serialization_base_dir: <%= snapshot_dir %>
+mbus: <%= nats %>
 local_db: sqlite3:/var/vcap/store/mysql_node.db
 tmp_dir: <%= lifecycle.tmp_dir || "/tmp" %>
 resque:

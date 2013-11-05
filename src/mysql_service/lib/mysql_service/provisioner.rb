@@ -189,12 +189,12 @@ class VCAP::Services::Mysql::Provisioner < VCAP::Services::Base::Provisioner
 
   def user_triggered_options(params)
     type = params["type"] || "full"
-    {:type => type}
+    {:type => type, :trigger_by => "user"}
   end
 
   def periodically_triggered_options(params)
     type = params["type"] || "incremental"
-    {:type => type}
+    {:type => type, :trigger_by => "auto"}
   end
 
   private
