@@ -1,5 +1,6 @@
 ---
 service_name: mysql
+mbus: nats://localhost:4222
 snapshots_base_dir: /var/vcap/services/
 serialization_base_dir: /var/vcap/services/
 local_db: sqlite3:/var/vcap/services/mysql/mysql_node.db
