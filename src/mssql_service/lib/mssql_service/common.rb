@@ -1,10 +1,10 @@
-# Copyright (c) 2009-2011 VMware, Inc.
+# Copyright (c) 2013-2015 VMware, Inc.
 module VCAP
   module Services
-    module Mssql
+    module MSSQL
       module Common
         def service_name
-          "MsaaS"
+          "MSSQLaaS"
         end
       end
     end

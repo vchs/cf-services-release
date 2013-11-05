@@ -18,4 +18,4 @@
 	url = https://github.com/cloudfoundry/vcap-common.git
 [submodule "src/mssql_service/vendor/integration-test-support"]
 	path = src/mssql_service/vendor/integration-test-support
-	url = https://github.com/Chunjie/integration-test-support.git
+	url = https://github.com/cloudfoundry/integration-test-support.git

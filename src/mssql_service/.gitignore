@@ -2,3 +2,4 @@ _*
 .bundle
 tmp
 vendor/cache
+vendor/bundle
