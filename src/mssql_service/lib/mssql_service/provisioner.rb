@@ -11,6 +11,7 @@ class VCAP::Services::MSSQL::Provisioner < VCAP::Services::Base::Provisioner
   end
 
   def generate_recipes(service_id, plan_config, version, best_nodes)
+    @logger.debug "plan_config: #{plan_config}"
     recipes = {}
     credentials = {}
     configurations = {}
@@ -102,8 +103,8 @@ class VCAP::Services::MSSQL::Provisioner < VCAP::Services::Base::Provisioner
     varz
   end
 
-  def get_port(port=1433)
-    port
+  def get_port(port)
+    port || 1433
   end
 
   private

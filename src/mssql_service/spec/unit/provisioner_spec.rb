@@ -46,7 +46,7 @@ describe VCAP::Services::MSSQL::Provisioner do
 
   describe "#get_port" do
     it "should be get default port for MSSQL" do
-      subject.get_port.should eq 1433
+      subject.get_port(nil).should eq 1433
     end
 
     it "should be get port for MSSQL" do
