@@ -2,13 +2,13 @@
 
 PACKAGE_DIR=/var/vcap/packages/portal
 JOB_DIR=/var/vcap/jobs/portal
-CONF_DIR=$JOB_DIR/config
 RUN_DIR=/var/vcap/sys/run/portal
 LOG_DIR=/var/vcap/sys/log/portal
 PIDFILE=$RUN_DIR/portal.pid
 DATA_DIR=/var/vcap/data/portal
 
 export PATH=/var/vcap/packages/ruby_next/bin:$PATH
+export PORTAL_CONF_FILE=$JOB_DIR/config/portal.yml
 
 source /var/vcap/packages/common/utils.sh
 
@@ -19,10 +19,8 @@ case $1 in
     mkdir -p $RUN_DIR
     mkdir -p $LOG_DIR
 
-    echo $$ > $PIDFILE
-
     cd $PACKAGE_DIR/portal/
-    exec bundle exec thin start --log $LOG_DIR/portal.log \
+    exec bundle exec thin -d -P$PIDFILE -l$LOG_DIR/portal.log start \
          >>$LOG_DIR/portal.stdout.log \
          2>>$LOG_DIR/portal.stderr.log
 
