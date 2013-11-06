@@ -1,0 +1,58 @@
+---
+<%
+nats_props_name = properties.nats_props || "nats"
+nats_props = properties.send(nats_props_name)
+nats = "nats://#{nats_props.user}:#{nats_props.password}@#{nats_props.address}:#{nats_props.port}"
+%>
+
+index: <%= spec.index %>
+mbus: <%= nats %>
+
+cloud_controller_uri: <%= properties.cc.srv_api_uri %>
+
+service:
+  name: mssql
+  description: "MSSQL Database"
+  unique_id: "0F9EDCF6-DC10-4AC3-98D7-862CA1D67AB3"  
+  provider: core
+  provider_name: 'Core'
+  version: "MSSQLSERVER2008R2"
+  supported_versions: ["MSSQLSERVER2008R2"]
+  plans:
+    'free':
+      unique_id: 'core_mssql_free'
+      description: 'Dedicate server, shared VM, 256MB memory, 2560MB storage, 30 connections'
+      free: true
+  default_plan: 'free'  
+  version_aliases:
+    current: "MSSQLSERVER2008R2"
+  tags: ['relational']
+  timeout: 10
+ip_route: localhost
+port: 4567
+
+cc_api_version: scv1
+provisioner_version: v3
+service_auth_tokens:
+  mssql_core: ""
+token: ""
+
+logging:
+  level: debug
+  file: /var/vcap/sys/log/mssql_gateway/mssql_gateway.log
+  <% if properties.syslog_aggregator %>
+  syslog: vcap.mssql_gateway
+  <% end %>
+mbus: <%= nats %>
+pid: /var/vcap/sys/run/mssql_service.pid
+z_interval: 30
+node_timeout: 8
+
+plan_management:
+  plans:
+    free:
+      low_water: 10
+      high_water: 180
+    expensive:
+      low_water: 1
+      high_water: 20
