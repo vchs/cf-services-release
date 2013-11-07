@@ -13,11 +13,13 @@ class VCAP::Services::Mysql::Provisioner < VCAP::Services::Base::Provisioner
   include VCAP::Services::Mysql::Common
   include VCAP::Services::Mysql::Util
   attr_reader :free_ports
+  attr_accessor :custom_resource_manager
 
   DEFAULT_PORTS_RANGE = (15000..16000)
   def initialize(opts)
     super(opts)
     @free_ports = {}
+    @custom_resource_manager = opts[:custom_resource_manager]
   end
 
   def create_snapshot_job
@@ -42,6 +44,13 @@ class VCAP::Services::Mysql::Provisioner < VCAP::Services::Base::Provisioner
 
   def create_backup_job
     VCAP::Services::Mysql::Backup::CreateBackupJob
+  end
+
+  def pre_send_announcement
+    super
+    %w[create_backup].each do |op|
+      eval %[@node_nats.subscribe("#{service_name}.#{op}") { |msg, reply| on_#{op}(msg, reply) }]
+    end
   end
 
   def varz_details
@@ -187,14 +196,40 @@ class VCAP::Services::Mysql::Provisioner < VCAP::Services::Base::Provisioner
     end
   end
 
-  def user_triggered_options(params)
-    type = params["type"] || "full"
-    {:type => type, :trigger_by => "user"}
+  def user_triggered_options(args)
+    type = args["type"] || "full"
+    {:type => type, :trigger_by => "user", :properties => args}
   end
 
-  def periodically_triggered_options(params)
-    type = params["type"] || "incremental"
-    {:type => type, :trigger_by => "auto"}
+  def periodically_triggered_options(args)
+    type = args["type"] || "incremental"
+    args.merge({:type => type, :trigger_by => "auto", :properties => args})
+  end
+
+  def on_create_backup(msg, reply)
+    @logger.debug("Receive backup job response: #{msg}")
+    backup_job_resp = BackupJobResponse.decode(msg)
+    resp_to_worker = SimpleResponse.new
+
+    if backup_job_resp.success
+      @logger.info("Backup job #{backup_job_resp.properties} succeeded")
+    else
+      @logger.warn("Backup job #{backup_job_resp.properties} failed due to #{resp_to_controller.error}")
+    end
+
+    properties = backup_job_resp.properties
+    f = Fiber.new do
+      @custom_resource_manager.update_resource_properties(properties["update_url"], properties)
+    end
+    f.resume
+    resp_to_worker.success = true
+  rescue => e
+    @logger.warn("Exception at on_create_backup: #{e}")
+    @logger.warn(e)
+    resp_to_worker.success = false
+    resp_to_worker.error = e.to_s
+  ensure
+    @node_nats.publish(reply, resp_to_worker.encode)
   end
 
   private
