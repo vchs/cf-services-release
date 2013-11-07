@@ -50,17 +50,8 @@ module VCAP
   end
 end
 
-describe "Mysql server node" do
+describe "Mysql server node", components: [:nats], hook_on: :all do
   include VCAP::Services::Mysql
-
-  before :all do
-    nats_runner = component(:nats, "MysqlNode")
-    nats_runner.start
-  end
-
-  after :all do
-    component!(:nats).stop
-  end
 
   before :each do
     @opts = getNodeTestConfig
