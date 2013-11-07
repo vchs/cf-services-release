@@ -4,7 +4,7 @@ require 'mysql_service/util'
 require 'mysql_service/job'
 
 module VCAP::Services::Mysql::Backup
-  describe CreateBackupJob do
+  describe CreateBackupJob, components: [:nats], hook_on: :all do
     include VCAP::Services::Base::AsyncJob
 
     before :all do
@@ -26,8 +26,6 @@ module VCAP::Services::Mysql::Backup
       })
       StorageClient.instance_variable_set(:@storage_connection, @connection)
 
-      nats_runner = component(:nats, "MysqlConn")
-      nats_runner.start
       @opts = getNodeTestConfig
       default_version = @opts[:default_version]
       @use_warden = @opts[:use_warden]
@@ -46,7 +44,6 @@ module VCAP::Services::Mysql::Backup
         @node.unprovision(@db["name"], [])
         EM.stop
       end if @use_warden
-      component!(:nats).stop
       stop_redis
     end
 

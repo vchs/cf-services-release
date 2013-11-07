@@ -20,11 +20,9 @@ module VCAP
   end
 end
 
-describe 'Mysql Connection Pool Test' do
+describe 'Mysql Connection Pool Test', components: [:nats], hook_on: :all do
 
   before :all do
-    nats_runner = component(:nats, "MysqlConn")
-    nats_runner.start
     @opts = getNodeTestConfig
     @logger = @opts[:logger]
     @opts.freeze
@@ -47,7 +45,6 @@ describe 'Mysql Connection Pool Test' do
       @node.unprovision(@db["name"], [])
       EM.stop
     end if @use_warden
-    component!(:nats).stop
   end
 
   def get_pool(opts={})
