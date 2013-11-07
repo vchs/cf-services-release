@@ -12,7 +12,7 @@ def require_dir(dir_pattern)
 end
 
 
-require_dir '../vendor/integration-test-support/support/**/*.rb'
+require_dir '../tmp/integration-test-support/support/**/*.rb'
 require_dir 'support/**/*.rb'
 
 tmp_dir = File.expand_path('../tmp', File.dirname(__FILE__))
@@ -25,8 +25,10 @@ REDIS_CACHE_PATH = "#{SPEC_TMP_DIR}/redis_cache"
 FileUtils.mkdir_p(REDIS_CACHE_PATH)
 
 RSpec.configure do |c|
-  c.include IntegrationExampleGroup, :type => :integration, :example_group => {:file_path => /\/integration\//}
-  c.include IntegrationExampleGroup, :type => :integration, :example_group => {:file_path => /\/functional\//}
+  c.include IntegrationExampleGroup, :type => :integration,
+    :example_group => {:file_path => /\/integration\//}
+  c.include IntegrationExampleGroup, :type => :integration,
+    :example_group => {:file_path => /\/functional\//}
 end
 
 require 'rubygems'
