@@ -19,6 +19,7 @@ module VCAP::Services::Mysql::Backup
 
   class CreateBackupJob < BackupJob
     include VCAP::Services::Mysql::Util
+    include VCAP::Services::Mysql::Common
     include Common
 
     BACKUP_CHANNEL = "create_backup".freeze
@@ -31,7 +32,6 @@ module VCAP::Services::Mysql::Backup
         @metadata = VCAP.symbolize_keys(options["metadata"])
         @type = @metadata[:type]
         @logger.info("Launch job: #{self.class} for #{name} with metadata: #{@metadata}")
-        @service_name = @config["service_name"]
 
         @backup_files = []
         lock = create_lock
@@ -45,8 +45,8 @@ module VCAP::Services::Mysql::Backup
 
           dump_path = get_dump_path
           package_file = "#{backup_id}.zip"
-          @package_file_path = File.join(dump_path, package_file)
-          package = VCAP::Services::Base::AsyncJob::Package.new(@package_file_path)
+          package_file_path = File.join(dump_path, package_file)
+          package = VCAP::Services::Base::AsyncJob::Package.new(package_file_path)
           package.manifest = backup[:single_backup][:manifest]
           files = Array(backup[:files])
           raise "No backup file to package." if files.empty?
@@ -56,19 +56,19 @@ module VCAP::Services::Mysql::Backup
             package.add_files f
           end
           package.pack
-          @backup_files << @package_file_path
+          @backup_files << package_file_path
           @logger.info("Package backup file #{File.join(dump_path, package_file)}")
-          File.open(@package_file_path) { |f| backup[:single_backup][:size] = f.size }
+          File.open(package_file_path) { |f| backup[:single_backup][:size] = f.size }
           backup[:single_backup][:date] = fmt_time
 
-          StorageClient.store_file(@service_name, name, backup_id, @package_file_path)
+          StorageClient.store_file(service_name, name, backup_id, package_file_path)
           if @metadata[:trigger_by] == "user"
-            response = filter_keys(backup[:single_backup]).delete_if { |k, v| k == :backup_id }
-            backup_url = @metadata[:backup_url]
-            raise "Cannot get backup url" unless backup_url
-            response[:backup_url] = backup_url
-            send_msg("#{@service_name}.#{BACKUP_CHANNEL}",
-                     success_response(backup_id, response))
+            properties = @metadata[:properties]
+            properties["size"] = backup[:single_backup][:size]
+            properties["date"] = backup[:single_backup][:date]
+
+            send_msg("#{service_name}.#{BACKUP_CHANNEL}",
+                     success_response(backup_id, properties))
           else
             DBClient.execute_as_transaction do
               DBClient.set_instance_backup_info(name, backup[:instance_info])
@@ -80,11 +80,11 @@ module VCAP::Services::Mysql::Backup
           @logger.info("Complete job: #{self.class} for #{name}")
         end
       rescue => e
-        StorageClient.delete_file(@service_name, name, backup_id, @package_file_path)
+        StorageClient.delete_file(service_name, name, backup_id)
         err_msg = handle_error(e)
         if @metadata[:trigger_by] == "user"
-          send_msg("#{@service_name}.#{BACKUP_CHANNEL}",
-                   failed_response(backup_id, err_msg))
+          send_msg("#{service_name}.#{BACKUP_CHANNEL}",
+                   failed_response(backup_id, @metadata[:properties], err_msg))
         end
       ensure
         set_status({:complete_time => Time.now.to_s})
