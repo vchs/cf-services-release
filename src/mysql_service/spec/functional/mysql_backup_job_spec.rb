@@ -67,22 +67,20 @@ module VCAP::Services::Mysql::Backup
         single_backup_info.should_not be_nil
         single_backup_info.values_at(:backup_id, :type, :date, :manifest).should_not include(nil)
 
-        StorageClient.get_file("mysql", service_id, backup_id).should_not be_nil
+        StorageClient.get_file("MyaaS", service_id, backup_id).should_not be_nil
       end
     end
 
     it "should be able to handle user triggered backup" do
       service_id = @db_instance.name
-      service_name = @config["service_name"]
+      service_name = "MyaaS"
       backup_id = UUIDTools::UUID.random_create.to_s
       EM.run do
         client = NATS.connect(:uri => @config["mbus"])
         client.subscribe("#{service_name}.create_backup") do |msg, reply|
           res = VCAP::Services::Internal::BackupJobResponse.decode(msg)
           res.success.should eq true
-          res.status.should eq "completed"
-          res.backup_id.should eq backup_id
-          res.properties.should include("size", "date", "backup_url")
+          res.properties.should include("size", "date", "status")
           sr = VCAP::Services::Internal::SimpleResponse.new
           sr.success = true
           client.publish(reply, sr.encode)
@@ -93,7 +91,7 @@ module VCAP::Services::Mysql::Backup
                                         :node_id    => @opts[:node_id],
                                         :metadata   => {:type => "full",
                                                         :trigger_by => "user",
-                                                        :backup_url => "http://test.com"}
+                                                        :properties => {}}
                                        )
 
         job_status = get_job(job_id)
@@ -101,7 +99,7 @@ module VCAP::Services::Mysql::Backup
         single_backup_info = DBClient.get_single_backup_info(service_id, backup_id)
         single_backup_info.should be_nil
 
-        StorageClient.get_file("mysql", service_id, backup_id).should_not be_nil
+        StorageClient.get_file(service_name, service_id, backup_id).should_not be_nil
 
         EM.add_timer(10) do
           fail "Error occurs during communication through nats"

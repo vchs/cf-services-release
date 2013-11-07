@@ -9,6 +9,7 @@ require 'vcap_services_base'
 
 $LOAD_PATH.unshift File.join(File.dirname(__FILE__), '..', 'lib')
 require 'mysql_service/provisioner'
+require 'mysql_service/custom_mysql_resource_manager'
 
 class VCAP::Services::Mysql::Gateway < VCAP::Services::Base::Gateway
 
@@ -25,6 +26,10 @@ class VCAP::Services::Mysql::Gateway < VCAP::Services::Base::Gateway
     {
       :resque => @config[:resque]
     }
+  end
+
+  def custom_resource_manager_class
+    VCAP::Services::Mysql::CustomMysqlResourceManager
   end
 end
 
