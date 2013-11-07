@@ -1,18 +1,57 @@
-require 'rspec/core/rake_task'
-require 'ci/reporter/rake/rspec'
+require "rspec/core/rake_task"
+require "ci/reporter/rake/rspec"
+require "fileutils"
 
-RSpec::Core::RakeTask.new("spec") do |t|
-  t.pattern = [
-    'spec/unit/**/*_spec.rb',
-    'spec/functional/**/*_spec.rb'
-  ]
+TMP_DIR = File.join(File.dirname(__FILE__), 'tmp')
+
+verbose(true)
+
+namespace :spec do
+  desc "Run unit test"
+  RSpec::Core::RakeTask.new(:unit => :setup) do |t|
+    t.pattern = "spec/unit/**/*_spec.rb"
+  end
+
+  desc "Run functional test"
+  RSpec::Core::RakeTask.new(:func => :setup) do |t|
+    t.pattern = "spec/functional/**/*_spec.rb"
+  end
+
+  desc "Run integration test"
+  RSpec::Core::RakeTask.new(:integration => :setup) do |t|
+    t.pattern = "spec/integration/**/*_spec.rb"
+  end
+
+  desc "Git checkout integration-test-support"
+  task :checkout_its do
+    ref = ENV["ITS_REF"] || "origin/master"
+    git_checkout("https://github.com/vchs/", "integration-test-support", ref)
+  end
+
+  desc "Git checkout service_controller"
+  task :checkout_sc do
+    ref = ENV["SC_REF"] || "origin/master"
+    git_checkout("https://github.com/vchs/", "service_controller", ref) do
+      Bundler.with_clean_env { sh "bundle install" }
+    end
+  end
+
+  task :setup => [:checkout_its, :checkout_sc]
+
+  def git_checkout(base_url, repo, ref)
+    FileUtils.mkdir_p TMP_DIR
+    Dir.chdir TMP_DIR do
+      unless Dir.exists?(repo)
+        sh "git clone --recursive #{base_url}/#{repo}"
+      end
+      Dir.chdir repo do
+        sh "git fetch && git clean -dffx && " \
+          "git reset --hard #{ref} && git submodule update --init"
+        yield if block_given?
+      end
+    end
+  end
 end
 
-RSpec::Core::RakeTask.new("spec:unit") do |t|
-  t.pattern = [
-    'spec/unit/**/*_spec.rb',
-  ]
-end
-
-
+task :spec => ["spec:unit", "spec:func"]
 task :default => :spec
