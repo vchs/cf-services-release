@@ -75,5 +75,56 @@ describe VCAP::Services::Mysql::Provisioner do
         subject.get_node_port("node2").should == 10000
       end
     end
+
+    describe ".after_update_instance_handle" do
+      before do
+        @node_id = "node1"
+        @node_port = 10001
+        @new_node_id= "node2"
+        @new_node_port = 10000
+
+        @old_handle = {
+          :configuration => {
+            "peers" => {
+              "active" => {
+                "credentials" => {
+                  "node_id" => @node_id,
+                  "port" => @node_port
+                }
+              }
+            }
+          }
+        }
+
+        @new_handle = {
+          :configuration => {
+            "peers" => {
+              "active" => {
+                "credentials" => {
+                  "node_id" => @new_node_id,
+                  "port" => @new_node_port
+                }
+              }
+            }
+          }
+        }
+
+        subject.initial_node_free_ports(@node_id)
+      end
+
+      it "should update free port used by handles" do
+        subject.after_update_instance_handle(@old_handle, @new_handle)
+        subject.free_ports[@node_id].include?(@node_port).should be
+        subject.free_ports[@new_node_id].include?(@new_node_port).should be_false
+      end
+    end
+
+    describe ".acquire_node_port" do
+      it "acquires port for given node" do
+        node_id = "node1"
+        subject.acquire_node_port(node_id, 10000)
+        subject.free_ports[node_id].include?(10000).should be_false
+      end
+    end
   end
 end
