@@ -219,3 +219,31 @@ def stop_redis
     rm -rf #{REDIS_CACHE_PATH}
   }
 end
+
+def expect_statement_allowed!(conn_string, sql)
+  lastex = nil
+  100.times do
+    begin
+      Sequel.connect(conn_string) do |conn|
+        sleep 0.1
+        conn.run(sql)
+      end
+      return true
+    rescue => e
+      lastex = e
+      # ignore
+    end
+  end
+  raise "Timed out waiting for #{sql} to be allowed, last exception #{lastex.inspect}"
+end
+
+def expect_statement_denied!(conn_string, sql)
+  expect do
+    100.times do
+      Sequel.connect(conn_string) do |conn|
+        sleep 0.1
+        conn.run(sql)
+      end
+    end
+  end.to raise_error(/command denied/)
+end
