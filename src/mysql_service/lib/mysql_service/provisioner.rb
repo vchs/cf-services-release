@@ -84,6 +84,12 @@ class VCAP::Services::Mysql::Provisioner < VCAP::Services::Base::Provisioner
     @free_ports[node_id] << port
   end
 
+  def acquire_node_port(node_id, port)
+    initial_node_free_ports(node_id) unless @free_ports[node_id]
+    @free_ports[node_id].delete(port)
+    port
+  end
+
   def initial_node_free_ports(node_id)
     set = Set.new
     node_port_range.each {|p| set << p}
@@ -165,7 +171,7 @@ class VCAP::Services::Mysql::Provisioner < VCAP::Services::Base::Provisioner
 
   def after_add_instance_handle(instance_handle)
     parse_node_ports(instance_handle) do |node_id, port|
-      @free_ports[node_id].delete(port)
+      acquire_node_port(node_id, port)
     end
   end
 
@@ -177,7 +183,7 @@ class VCAP::Services::Mysql::Provisioner < VCAP::Services::Base::Provisioner
     end
 
     parse_node_ports(new_handle) do |node_id, port|
-      @free_ports[node_id].delete(port)
+      acquire_node_port(node_id, port)
     end
   end
 
@@ -200,6 +206,7 @@ class VCAP::Services::Mysql::Provisioner < VCAP::Services::Base::Provisioner
       cred = peer["credentials"]
       node = cred["node_id"]
       port = cred["port"]
+      raise "Failed to parse handle: #{handle}" unless (node && port)
       yield node, port
     end
   end
