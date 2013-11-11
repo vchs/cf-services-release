@@ -17,8 +17,8 @@ class VCAP::Services::MSSQL::Provisioner < VCAP::Services::Base::Provisioner
     configurations = {}
     name = service_id
     # Must not prefix with number
-    user = "u" + SecureRandom.uuid.to_s.gsub(/-/, '')
-    password = "p" + SecureRandom.uuid.to_s.gsub(/-/, '')
+    user = "u" + SecureRandom.uuid.to_s.gsub(/-/, '')[0, 9]
+    password = "p" + SecureRandom.uuid.to_s.gsub(/-/, '')[0, 9]
 
     # configure active node
     active_node = best_nodes.shift
@@ -69,7 +69,7 @@ class VCAP::Services::MSSQL::Provisioner < VCAP::Services::Base::Provisioner
   end
 
   def generate_service_id
-    flavor + SecureRandom.uuid.to_s.gsub(/-/, '')
+    "s" + SecureRandom.uuid.to_s.gsub(/-/, '')[0, 9]
   end
 
   def varz_details
