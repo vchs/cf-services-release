@@ -34,6 +34,22 @@ describe VCAP::Services::Mysql::Provisioner do
         credentials["node_id"].should == "node1"
         credentials["port"].should == VCAP::Services::Mysql::Provisioner::DEFAULT_PORTS_RANGE.first
       end
+
+      it "limit the dbname and password length" do
+        service_id = subject.generate_service_id
+        version = "5.6"
+        plan = "free"
+        best_nodes = [{
+          "id" => "node1",
+          "host" => "192.168.1.1"
+        }]
+        recipes = subject.generate_recipes(service_id, {plan.to_sym => {}}, version, best_nodes)
+
+        name, username, passwd = %w{name username password}.map {|k| recipes["credentials"][k]}
+        name.length.should eq(subject.dbname_length + 1) # with one prefix 'd'
+        username.length.should == (subject.password_length + 1)
+        passwd.length.should == (subject.password_length + 1)
+      end
     end
   end
 

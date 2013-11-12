@@ -15,7 +15,10 @@ class VCAP::Services::Mysql::Provisioner < VCAP::Services::Base::Provisioner
   attr_reader :free_ports
   attr_accessor :custom_resource_manager
 
+  PASSWORD_LENGTH = 9
+  DBNAME_LENGTH = 9
   DEFAULT_PORTS_RANGE = (15000..16000)
+
   def initialize(opts)
     super(opts)
     @free_ports = {}
@@ -73,7 +76,7 @@ class VCAP::Services::Mysql::Provisioner < VCAP::Services::Base::Provisioner
   end
 
   def generate_service_id
-    'd' + SecureRandom.uuid.to_s.gsub(/-/, '')
+    'd' + SecureRandom.uuid.to_s.gsub(/-/, '')[0, dbname_length]
   end
 
   # direct operate the hash is safe since gateway is single threaded
@@ -109,13 +112,21 @@ class VCAP::Services::Mysql::Provisioner < VCAP::Services::Base::Provisioner
     DEFAULT_PORTS_RANGE
   end
 
+  def password_length
+    PASSWORD_LENGTH
+  end
+
+  def dbname_length
+    DBNAME_LENGTH
+  end
+
   def generate_recipes(service_id, plan_config, version, best_nodes)
     recipes = {}
     credentials = {}
     configurations = {}
     name = service_id
-    user = 'u' + generate_credential
-    password = 'p' + generate_credential
+    user = 'u' + generate_credential(password_length)
+    password = 'p' + generate_credential(password_length)
 
     # configure active node
     active_node = best_nodes.shift
