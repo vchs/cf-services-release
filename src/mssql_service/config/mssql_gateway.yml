@@ -1,6 +1,6 @@
 ---
 index: 0
-mbus: nats://windows:windows@192.168.56.30:4242
+mbus: nats://localhost:4222
 
 cloud_controller_uri: http://localhost:3000
 
