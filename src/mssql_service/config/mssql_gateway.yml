@@ -17,6 +17,7 @@ service:
       unique_id: 'core_mssql_free'
       description: 'Dedicate MSSQL server, shared VM, 1024MB memory, 5012MB storage, unlimited connections'
       free: true
+      active: true
   default_plan: free
   version_aliases:
     current: "2012"
