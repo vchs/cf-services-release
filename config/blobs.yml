@@ -144,3 +144,13 @@ redis/redis-2.6.16.tar.gz:
   sha: !binary |-
     Zjk0YzBmNjIzYWFhOGMzMTBmOWJlMmE4OGU4MTcxNmRlMDFjZTBjZQ==
   size: 999579
+mysql_ci/mysql-5.6.13-packaging-all-in-one.tgz:
+  object_id: dd1e0eb9-fb29-430e-a1d1-55fedb6937e8
+  sha: !binary |-
+    MTdiMGVmY2ViN2U2OTJmMmQzN2QxMDJjOTc2ZTJlOWNhNGY4NWJmYw==
+  size: 76898956
+mysql_ci/mysql-5.6.13-config-all-in-one.tgz:
+  object_id: 49647a59-1976-4137-b8f1-63ec92d68ae3
+  sha: !binary |-
+    ZjY5MWIxNGUwODg5NjgxMGUxZjIwY2I0ZmMzOGE4MWM5OWIzODYzYg==
+  size: 2708
