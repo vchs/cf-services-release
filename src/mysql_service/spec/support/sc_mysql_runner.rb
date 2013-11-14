@@ -5,6 +5,7 @@ class ScMysqlRunner < ComponentRunner
   end
 
   def start(opts=nil)
+    start_redis
     Dir.chdir(File.expand_path("../..", File.dirname(__FILE__))) do
       Bundler.with_clean_env do
         sh "bundle install >> #{tmp_dir}/log/bundle.out"
