@@ -39,7 +39,11 @@ namespace :spec do
   desc "Git checkout service health manager"
   task :checkout_svc_hm do
     # FIXME checkout code from github instead of copying the code from directory
-    FileUtils.cp_r('../svc_hm/', TMP_DIR)
+    repo = "svc_hm"
+    FileUtils.cp_r(File.join("..", repo), TMP_DIR)
+    Dir.chdir File.join(TMP_DIR, repo) do
+      Bundler.with_clean_env { sh "bundle install" }
+    end
   end
 
   task :setup => [:checkout_its, :checkout_sc, :checkout_svc_hm]
