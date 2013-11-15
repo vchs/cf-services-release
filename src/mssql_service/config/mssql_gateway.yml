@@ -15,7 +15,7 @@ service:
   plans:
     'free':
       unique_id: 'core_mssql_free'
-      description: 'Dedicate MSSQL server, shared VM, 1024MB memory, 5012MB storage, unlimited connections'
+      description: 'Contained DB, 256 MB Memory, 2.56 GB, 30 Connections'
       free: true
       active: true
   default_plan: free
@@ -34,8 +34,8 @@ token: ""
 
 logging:
   level: debug
-  file: /var/vcap/sys/log/mssql_gateway/mssql_gateway.log
-pid: /var/vcap/sys/run/mssql_service.pid
+  file: /Users/khalilz/khalil_vmware/MSSQLaaS/cf-services-release/src/mssql_service/mssql_gateway.log
+#pid: /var/vcap/sys/run/mssql_service.pid
 z_interval: 30
 node_timeout: 8
 
