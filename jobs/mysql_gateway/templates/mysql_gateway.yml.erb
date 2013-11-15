@@ -128,6 +128,16 @@ plan_management:
       high_water: <%= plan_mgmt.send(pf).job_management.high_water %>
       low_water: <%= plan_mgmt.send(pf).job_management.low_water %>
       allow_over_provisioning: <%= plan_mgmt.send(pf).configuration.allow_over_provisioning || "false" %>
+      <% if plan_mgmt.send(pf).peers %>
+      peers:
+      <%   peers_config = plan_mgmt.send(pf).peers
+           peers_config.instance_eval("def fields; @table.keys; end;")
+           peers_config.fields.each do |role| %>
+        <%= role %>:
+          count: <%= peers_config.send(role).count || 1 %>
+      <%   end
+        end
+      %>
     <% opts = plan_mgmt.send(pf).configuration.lifecycle %>
     <% if opts && opts.enable == true %>
       lifecycle:

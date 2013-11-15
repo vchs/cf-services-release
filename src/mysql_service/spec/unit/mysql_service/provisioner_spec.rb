@@ -8,47 +8,86 @@ describe VCAP::Services::Mysql::Provisioner do
   end
 
   describe ".generate_recipes" do
-    context "for single node topology" do
+    before do
+      @service_id = subject.generate_service_id
+      @version = "5.6"
+      @plan = "free"
+      @best_nodes = [{
+        "id" => "node1",
+        "host" => "192.168.1.1"
+      }]
+
+    end
+    context "for single peer topology" do
       it "generates a valid recipes" do
-        service_id = subject.generate_service_id
-        version = "5.6"
-        plan = "free"
-        best_nodes = [{
-          "id" => "node1",
-          "host" => "192.168.1.1"
-        }]
-        recipes = subject.generate_recipes(service_id, {plan.to_sym => {}}, version, best_nodes)
-        config = recipes["configuration"]
+        recipes = subject.generate_recipes(@service_id, {@plan.to_sym => {}},
+                                           @version, @best_nodes)
+        config = recipes.configuration
         config.should be
-        credentials = recipes["credentials"]
+        credentials = recipes.credentials
         credentials.should be
 
-        config["peers"].should be
-        config["version"].should eq(version)
-        config["plan"].should eq(plan)
-        config["peers"]["active"].should be
-        config["peers"]["active"]["credentials"]["node_id"].should == "node1"
+        config["peers"].should be_instance_of(Array)
+        config["version"].should eq(@version)
+        config["plan"].should eq(@plan)
+        active_peer = config["peers"].find{|p| p["role"] == "active"}
+        active_peer.should be
+        active_peer["credentials"]["node_id"].should == "node1"
 
         config["backup_peer"].should == "node1"
-        credentials["name"].should == service_id
+        credentials["name"].should == @service_id
         credentials["node_id"].should == "node1"
         credentials["port"].should == VCAP::Services::Mysql::Provisioner::DEFAULT_PORTS_RANGE.first
       end
 
       it "limit the dbname and password length" do
-        service_id = subject.generate_service_id
-        version = "5.6"
-        plan = "free"
-        best_nodes = [{
-          "id" => "node1",
-          "host" => "192.168.1.1"
-        }]
-        recipes = subject.generate_recipes(service_id, {plan.to_sym => {}}, version, best_nodes)
+        recipes = subject.generate_recipes(@service_id, {@plan.to_sym => {}},
+                                           @version, @best_nodes)
 
-        name, username, passwd = %w{name username password}.map {|k| recipes["credentials"][k]}
+        name, username, passwd = %w{name username password}.map {|k| recipes.credentials[k]}
         name.length.should eq(subject.dbname_length + 1) # with one prefix 'd'
         username.length.should == (subject.password_length + 1)
         passwd.length.should == (subject.password_length + 1)
+      end
+    end
+
+    context "for multiple peers topology" do
+      before do
+        @service_id = subject.generate_service_id
+        @version = "5.6"
+        @plan = "free"
+        @best_nodes = [{
+          "id" => "node1",
+          "host" => "192.168.1.1"
+        }, {
+          "id" => "node2",
+          "host" => "192.168.1.2"
+        }, {
+          "id" => "node3",
+          "host" => "192.168.1.3"
+        }]
+      end
+
+      it "generate valid recipes" do
+        recipes = subject.generate_recipes(@service_id, {@plan.to_sym => {}},
+                                           @version, @best_nodes)
+        peers = recipes.configuration["peers"]
+        active_peers = peers.select {|p| p["role"] == "active"}
+        passive_peers = peers.select {|p| p["role"] == "passive"}
+        active_peers.size.should eq(1)
+        passive_peers.size.should eq(2)
+
+        credentials = recipes.credentials
+        credentials["peers"].size.should eq(3)
+      end
+
+      it "use passive peer as backup peer" do
+        recipes = subject.generate_recipes(@service_id, {@plan.to_sym => {}},
+                                           @version, @best_nodes)
+        peers = recipes.configuration["peers"]
+        backup_peer_id = recipes.configuration["backup_peer"]
+        backup_peer = peers.find {|p| p["credentials"]["node_id"] == backup_peer_id }
+        backup_peer["role"].should eq("passive")
       end
     end
   end
@@ -68,14 +107,15 @@ describe VCAP::Services::Mysql::Provisioner do
         subject.get_node_port("node1").should == 10000
         instance_handle = {
           :configuration => {
-            "peers" => {
-              "active" => {
+            "peers" => [
+              {
+                "role" => "active",
                 "credentials" => {
                   "node_id" => "node1",
                   "port" => 10001
                 }
               }
-            }
+            ]
           }
         }
         subject.after_add_instance_handle(instance_handle)
@@ -101,27 +141,29 @@ describe VCAP::Services::Mysql::Provisioner do
 
         @old_handle = {
           :configuration => {
-            "peers" => {
-              "active" => {
+            "peers" => [
+              {
+                "role" => "active",
                 "credentials" => {
                   "node_id" => @node_id,
                   "port" => @node_port
                 }
               }
-            }
+            ]
           }
         }
 
         @new_handle = {
           :configuration => {
-            "peers" => {
-              "active" => {
+            "peers" => [
+              {
+                "role" => "passive",
                 "credentials" => {
                   "node_id" => @new_node_id,
                   "port" => @new_node_port
                 }
               }
-            }
+            ]
           }
         }
 
