@@ -18,6 +18,8 @@ class VCAP::Services::Mysql::Provisioner < VCAP::Services::Base::Provisioner
   PASSWORD_LENGTH = 9
   DBNAME_LENGTH = 9
   DEFAULT_PORTS_RANGE = (15000..16000)
+  ACTIVE_ROLE = "active".freeze
+  PASSIVE_ROLE = "passive".freeze
 
   def initialize(opts)
     super(opts)
@@ -120,10 +122,22 @@ class VCAP::Services::Mysql::Provisioner < VCAP::Services::Base::Provisioner
     DBNAME_LENGTH
   end
 
+  ####
+  # Generate mysql recipes for both single node(peer) and multiple peers topology.
+  # recipes.configuration always contains information for all peers.
+  #
+  # recipes.credentials is customer facing connection string. It always contains
+  # connection string for active peer due to backward compatiblity. However, credentials
+  # also contains info of all peers in multi-peers topology, a multi-peers aware
+  # application can connect to both active and passive peer on demand.
+  #
   def generate_recipes(service_id, plan_config, version, best_nodes)
-    recipes = {}
     credentials = {}
-    configurations = {}
+    configuration = {
+      "version" => version,
+      "plan" => plan_config.keys.first.to_s,
+    }
+    peers_config = []
     name = service_id
     user = 'u' + generate_credential(password_length)
     password = 'p' + generate_credential(password_length)
@@ -134,16 +148,12 @@ class VCAP::Services::Mysql::Provisioner < VCAP::Services::Base::Provisioner
       active_node["id"], name, user, password, active_node["host"],
       get_node_port(active_node["id"])
     )
-    credentials = active_creds
-    configurations = {
-      "version" => version,
-      "plan" => plan_config.keys[0].to_s,
-      "peers" => {
-        "active" => {
-          "credentials" => credentials
-        }
-      }
+    active_peer_config = {
+      "credentials" => active_creds,
+      "role" => ACTIVE_ROLE
     }
+    credentials = active_creds
+    peers_config << active_peer_config
 
     # passive nodes
     best_nodes.each do |n|
@@ -151,18 +161,21 @@ class VCAP::Services::Mysql::Provisioner < VCAP::Services::Base::Provisioner
         n["id"], name, user, password, n["host"],
         get_node_port(n["id"])
       )
-      credentials["peers"] ||= {}
-      credentials["peers"]["passive"] ||= []
-      credentials["peers"]["passive"] << creds
+      passive_peer_config = {
+        "credentials" => creds,
+        "role" => PASSIVE_ROLE
+      }
+      peers_config << passive_peer_config
     end
 
-    configurations["backup_peer"] = get_backup_peer(credentials)
+    configuration["peers"] = peers_config
+    credentials["peers"] = peers_config if best_nodes.size > 1
+    configuration["backup_peer"] = get_backup_peer(credentials)
 
-    recipes = {
-      "credentials" => credentials,
-      "configuration" => configurations,
-    }
-    return recipes
+    recipes = VCAP::Services::Internal::ServiceRecipes.new
+    recipes.credentials = credentials
+    recipes.configuration = configuration
+    recipes
   rescue => e
     @logger.error("Exception in generate_recipes, #{e}")
     @logger.error(e)
@@ -274,8 +287,9 @@ class VCAP::Services::Mysql::Provisioner < VCAP::Services::Base::Provisioner
   end
 
   def get_backup_peer(credentials)
-    if credentials && credentials["peers"] && passives = credentials["peers"]["passive"]
-      passives[0]["node_id"] if passives.size > 0
+    if credentials && credentials["peers"]
+      passives = credentials["peers"].select {|p| p["role"] == PASSIVE_ROLE }
+      passives[0]["credentials"]["node_id"] if passives.size > 0
     else
       credentials["node_id"]
     end
