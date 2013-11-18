@@ -1,2 +1,6 @@
 service_controller:
   log_file_location: "/var/vcap/sys/log/service_controller/service_controller.log"
+  registered_users:
+    "admin@test.org": { "password": "admin", "role": "ADMIN" }
+    "gateway@test.org": { "password": "gateway", "role": "GATEWAY" }
+    "a@b.c": { "password": "abc", "role": "USER" }
