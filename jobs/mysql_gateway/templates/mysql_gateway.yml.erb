@@ -106,6 +106,7 @@ logging:
 
 
 node_timeout: <%= gateway.node_timeout || 8 %>
+auth_key: "gateway@test.org:gateway"
 
 pid: /var/vcap/sys/run/mysql_gateway/mysql_gateway.pid
 z_interval: <%= gateway.z_interval || 30 %>
