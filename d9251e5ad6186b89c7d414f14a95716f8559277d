@@ -1,0 +1,8 @@
+Verified+1: CI Master <cf-ci@rbcon.com>
+Code-Review+1: Andrew Liu <aliu@vmware.com>
+Code-Review+2: Yisui Hu <yisuih@vmware.com>
+Submitted-by: Khalil Zhang <khalilz@vmware.com>
+Submitted-at: Mon, 25 Nov 2013 09:06:55 +0000
+Reviewed-on: http://tempest-reviews.eng.vmware.com/1524
+Project: cf-services-release
+Branch: refs/heads/master
