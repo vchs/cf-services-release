@@ -38,6 +38,7 @@ logging:
 pid: /var/vcap/sys/run/mssql_service.pid
 z_interval: 30
 node_timeout: 8
+auth_key: "gateway@test.org:gateway"
 
 plan_management:
   plans:

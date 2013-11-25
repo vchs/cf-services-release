@@ -23,20 +23,19 @@ describe VCAP::Services::MSSQL::Provisioner do
 
         recipes = subject.generate_recipes(service_id, plan_config , version, best_nodes)
 
-        config = recipes["configuration"]
+        config = recipes.configuration
         config.should be_instance_of Hash
         config["version"].should eq version
         config["plan"].should eq "free"
 
-        credentials = recipes["credentials"]
+        credentials = recipes.credentials
         credentials.should be_instance_of Hash
         credentials["peers"].should be_nil
 
         peers = config["peers"]
-        peers.should be_instance_of Hash
+        peers.should be_instance_of Array
 
-        credentials = recipes["credentials"]
-        credentials.should be peers["active"]["credentials"]
+        credentials.should be peers[0]["credentials"]
         credentials["name"].should eq service_id
         credentials["node_id"].should eq node_id
         credentials["port"].should eq 9999

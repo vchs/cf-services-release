@@ -6,19 +6,25 @@ require_relative "./common"
 class VCAP::Services::MSSQL::Provisioner < VCAP::Services::Base::Provisioner
   include VCAP::Services::MSSQL::Common
 
+  PASSWORD_LENGTH = 9
+  ACTIVE_ROLE = "active".freeze
+  PASSIVE_ROLE = "passive".freeze
+
   def initialize(opts)
     super(opts)
   end
 
   def generate_recipes(service_id, plan_config, version, best_nodes)
-    @logger.debug "plan_config: #{plan_config}"
-    recipes = {}
     credentials = {}
-    configurations = {}
+    configuration = {
+      "version" => version,
+      "plan" => plan_config.keys.first.to_s,
+    }
+    peers_config = []
     name = service_id
     # Must not prefix with number
-    user = "u" + SecureRandom.uuid.to_s.gsub(/-/, '')[0, 9]
-    password = "p" + SecureRandom.uuid.to_s.gsub(/-/, '')[0, 9]
+    user = "u" + generate_credential(password_length)
+    password = "p" + generate_credential(password_length)
 
     # configure active node
     active_node = best_nodes.shift
@@ -31,16 +37,13 @@ class VCAP::Services::MSSQL::Provisioner < VCAP::Services::Base::Provisioner
       get_port(active_node["port"])
     )
 
-    credentials = active_node_credential
-    configurations = {
-      "version" => version,
-      "plan" => plan_config.keys[0].to_s,
-      "peers" => {
-        "active" => {
-          "credentials" => credentials
-        }
-      }
+    active_peer_config = {
+      "credentials" => active_node_credential,
+      "role" => ACTIVE_ROLE
     }
+
+    credentials = active_node_credential
+    peers_config << active_peer_config
 
     # passive nodes
     best_nodes.each do |n|
@@ -53,17 +56,20 @@ class VCAP::Services::MSSQL::Provisioner < VCAP::Services::Base::Provisioner
         get_port(n["port"])
       )
 
-      credentials["peers"] ||= {}
-      credentials["peers"]["passive"] ||= []
-      credentials["peers"]["passive"] << passive_node_credential
+      passive_peer_config = {
+        "credentials" => passive_node_credential,
+        "role" => PASSIVE_ROLE
+      }
+      peers_config << passive_peer_config
     end
 
-    recipes = {
-      "credentials" => credentials,
-      "configuration" => configurations,
-    }
+    configuration["peers"] = peers_config
+    credentials["peers"] = peers_config if best_nodes.size > 1
 
-    return recipes
+    recipes = VCAP::Services::Internal::ServiceRecipes.new
+    recipes.credentials = credentials
+    recipes.configuration = configuration
+    recipes
   rescue => e
     @logger.error "Exception in generate_recipes, #{e}"
   end
@@ -138,5 +144,13 @@ class VCAP::Services::MSSQL::Provisioner < VCAP::Services::Base::Provisioner
 
     uri = URI::Generic.new(scheme, credentials, host, port, nil, path, nil, nil, nil)
     uri.to_s
+  end
+
+  def generate_credential(length=9)
+    SecureRandom.uuid.to_s.gsub(/-/, '')[0, length]
+  end
+
+  def password_length
+    PASSWORD_LENGTH
   end
 end
