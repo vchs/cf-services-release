@@ -4,9 +4,8 @@ require 'mysql_service/util'
 require 'mysql_service/job'
 
 module VCAP::Services::Mysql::Backup
-  describe CreateBackupJob, components: [:nats], hook: :all do
+  describe "backup jobs", components: [:nats], hook: :all do
     include VCAP::Services::Base::AsyncJob
-
     before :all do
       `which redis-server`
       pending "Redis not installed" unless $?.success?
@@ -26,6 +25,7 @@ module VCAP::Services::Mysql::Backup
       })
       StorageClient.instance_variable_set(:@storage_connection, @connection)
 
+      @tmpfiles = []
       @opts = getNodeTestConfig
       default_version = @opts[:default_version]
       @use_warden = @opts[:use_warden]
@@ -44,66 +44,120 @@ module VCAP::Services::Mysql::Backup
         @node.unprovision(@db["name"], [])
         EM.stop
       end if @use_warden
+      @tmpfiles.each { |tmpfile| FileUtils.rm_rf(tmpfile) }
       stop_redis
+      FileUtils.rm_rf @opts[:node_tmp_dir]
     end
 
-    it "should be able to create full & incremental backup" do
-      service_id = @db_instance.name
-      ["full", "incremental"].each do |type|
-        backup_id = UUIDTools::UUID.random_create.to_s
-        job_id = CreateBackupJob.create(:service_id => service_id,
-                                        :backup_id  => backup_id,
-                                        :node_id    => @opts[:node_id],
-                                        :metadata   => {:type => type}
-                                       )
+    describe "create and restore backup jobs" do
 
-        instance_backup_info = DBClient.get_instance_backup_info(service_id)
-        instance_backup_info.should_not be_nil
-        instance_backup_info.values_at(:last_lsn, :last_backup).should_not include(nil)
-
-        job_status = get_job(job_id)
-        backup_id.should eq job_status[:result]["backup_id"]
-        single_backup_info = DBClient.get_single_backup_info(service_id, backup_id)
-        single_backup_info.should_not be_nil
-        single_backup_info.values_at(:backup_id, :type, :date, :manifest).should_not include(nil)
-
-        StorageClient.get_file("MyaaS", service_id, backup_id).should_not be_nil
-      end
-    end
-
-    it "should be able to handle user triggered backup" do
-      service_id = @db_instance.name
-      service_name = "MyaaS"
-      backup_id = UUIDTools::UUID.random_create.to_s
-      EM.run do
+      def subscribe_restore_channel(service_name, service_id_for_restore)
         client = NATS.connect(:uri => @config["mbus"])
-        client.subscribe("#{service_name}.create_backup") do |msg, reply|
-          res = VCAP::Services::Internal::BackupJobResponse.decode(msg)
+        channel = "#{service_name}.restore_backup.#{service_id_for_restore}"
+
+        subscription = client.subscribe(channel) do |msg, reply|
+          client.unsubscribe(subscription)
+          res = VCAP::Services::Internal::SimpleResponse.decode(msg)
           res.success.should eq true
-          res.properties.should include("size", "date", "status")
           sr = VCAP::Services::Internal::SimpleResponse.new
           sr.success = true
           client.publish(reply, sr.encode)
         end
 
-        job_id = CreateBackupJob.create(:service_id => service_id,
-                                        :backup_id  => backup_id,
-                                        :node_id    => @opts[:node_id],
-                                        :metadata   => {:type => "full",
-                                                        :trigger_by => "user",
-                                                        :properties => {}}
-                                       )
+        client
+      end
 
-        job_status = get_job(job_id)
-        backup_id.should eq job_status[:result]["backup_id"]
-        single_backup_info = DBClient.get_single_backup_info(service_id, backup_id)
-        single_backup_info.should be_nil
+      def restore_and_check(service_id_for_restore, original_service_id, backup_id, trigger_by)
+        RestoreBackupJob.create(:service_id          => service_id_for_restore,
+                                :original_service_id => original_service_id,
+                                :node_id             => @opts[:node_id],
+                                :backup_id           => backup_id,
+                                :metadata            => {:trigger_by      => trigger_by,
+                                                         :service_version => "5.6"}
+                               )
 
-        StorageClient.get_file(service_name, service_id, backup_id).should_not be_nil
+        # only supports warden
+        data_dir = @config["mysqld"]["5.6"]["datadir"]
+        file_to_check = File.join(data_dir, service_id_for_restore, "data", "ibdata1")
+        File.exists?(file_to_check).should == true
+        @tmpfiles << File.join(data_dir, service_id_for_restore)
+      end
 
-        EM.add_timer(10) do
-          fail "Error occurs during communication through nats"
-          EM.stop
+      it "should be able to create full & incremental backups and restore them" do
+        service_id = @db_instance.name
+        backup_id = nil
+        ["full", "incremental"].each do |type|
+          backup_id = UUIDTools::UUID.random_create.to_s
+          job_id = CreateBackupJob.create(:service_id => service_id,
+                                          :backup_id  => backup_id,
+                                          :node_id    => @opts[:node_id],
+                                          :metadata   => {:type => type}
+                                         )
+
+          instance_backup_info = DBClient.get_instance_backup_info(service_id)
+          instance_backup_info.should_not be_nil
+          instance_backup_info.values_at(:last_lsn, :last_backup).should_not include(nil)
+
+          job_status = get_job(job_id)
+          backup_id.should eq job_status[:result]["backup_id"]
+          single_backup_info = DBClient.get_single_backup_info(service_id, backup_id)
+          single_backup_info.should_not be_nil
+          single_backup_info.values_at(:backup_id, :type, :date, :manifest).should_not include(nil)
+
+          StorageClient.get_file("MyaaS", service_id, backup_id).should_not be_nil
+        end
+
+        EM.run do
+          service_id_for_restore = UUIDTools::UUID.random_create.to_s
+          service_name = "MyaaS"
+          subscribe_restore_channel(service_name, service_id_for_restore)
+          restore_and_check(service_id_for_restore, service_id, backup_id, "auto")
+
+          EM.add_timer(10) do
+            fail "Error occurs during communication through nats"
+            EM.stop
+          end
+
+        end
+      end
+
+      it "should be able to handle user triggered backup & restore" do
+        service_id = @db_instance.name
+        service_id_for_restore = UUIDTools::UUID.random_create.to_s
+        service_name = "MyaaS"
+        backup_id = UUIDTools::UUID.random_create.to_s
+        EM.run do
+          client = subscribe_restore_channel(service_name, service_id_for_restore)
+          client.subscribe("#{service_name}.create_backup") do |msg, reply|
+            res = VCAP::Services::Internal::BackupJobResponse.decode(msg)
+            res.success.should eq true
+            res.properties.should include("size", "date", "status")
+            sr = VCAP::Services::Internal::SimpleResponse.new
+            sr.success = true
+            client.publish(reply, sr.encode)
+          end
+
+          job_id = CreateBackupJob.create(:service_id => service_id,
+                                          :backup_id  => backup_id,
+                                          :node_id    => @opts[:node_id],
+                                          :metadata   => {:type => "full",
+                                                          :trigger_by => "user",
+                                                          :properties => {}}
+                                         )
+
+          job_status = get_job(job_id)
+          backup_id.should eq job_status[:result]["backup_id"]
+          single_backup_info = DBClient.get_single_backup_info(service_id, backup_id)
+          single_backup_info.should be_nil
+
+          StorageClient.get_file(service_name, service_id, backup_id).should_not be_nil
+
+          restore_and_check(service_id_for_restore, service_id, backup_id, "user")
+
+          EM.add_timer(20) do
+            fail "Error occurs during communication through nats"
+            EM.stop
+          end
         end
       end
     end
