@@ -2,7 +2,7 @@ $LOAD_PATH.unshift File.join(File.dirname(__FILE__), '..')
 require "util"
 require "mysql_error"
 require "datamapper_l"
-require "node"
+require_relative "../node"
 
 module VCAP::Services::Mysql::Backup
   include VCAP::Services::Base::AsyncJob::Backup
@@ -209,7 +209,7 @@ module VCAP::Services::Mysql::Backup
       end
       backup_folders = backup_ids.map { |id| File.join(dump_path, id) }
 
-      mysqld_properties = @config["mysqld"][@metadata[:service_version]]
+      mysqld_properties = @config["mysqld"][@metadata[:properties][:service_version]]
       @data_dir = mysqld_properties["datadir"]
       @data_dir << "/#{name}/data" if use_warden
       backup_conf = VCAP.symbolize_keys(@config["backup"] || {})
