@@ -29,8 +29,8 @@ GIT
 
 GIT
   remote: https://github.com/vchs/vcap-services-base.git
-  revision: cd1278742543dcf593a4dff1d0bfecece6d2098a
-  ref: cd1278742543
+  revision: ba25fac0ec658bae3c7f752133872fbb35fdb2e0
+  ref: ba25fac0ec
   specs:
     vcap_services_base (0.1.17)
       cf-uaa-lib
