@@ -25,15 +25,23 @@ module VCAP::Services::Mysql::Backup
       })
       StorageClient.instance_variable_set(:@storage_connection, @connection)
 
-      @tmpfiles = []
+      @test_dbs = []
       @opts = getNodeTestConfig
-      default_version = @opts[:default_version]
+      @default_plan = @opts[:plan]
+      @default_version = @opts[:default_version]
       @use_warden = @opts[:use_warden]
       EM.run do
         @node = VCAP::Services::Mysql::Node.new(@opts)
         EM.add_timer(1) do
-          @db = @node.provision(@opts[:plan], nil, default_version)
-          @db_instance = @node.mysqlProvisionedService.get(@db["service_id"])
+          @db = @node.provision(@default_plan, nil, @default_version)
+
+          @test_dbs << @db
+
+          conn = connect_to_mysql(@db)
+          conn.query("CREATE TABLE test(id INT)")
+          conn.query("INSERT INTO test VALUE(10)")
+          conn.query("INSERT INTO test VALUE(20)")
+
           EM.stop
         end
       end if @use_warden
@@ -41,13 +49,20 @@ module VCAP::Services::Mysql::Backup
 
     after :all do
       EM.run do
-        @node.unprovision(@db["service_id"], [])
+        @test_dbs.each do |db|
+          begin
+            service_id = db["service_id"]
+            @node.unprovision(service_id, [])
+            @node.instance_variable_get(:@logger).info("Clean up temp database: #{service_id}")
+          rescue => e
+            @node.instance_variable_get(:@logger).info("Error during cleanup #{e}")
+          end
+        end if @test_dbs
+
         @client.close if @client
         EM.stop
       end if @use_warden
-      @tmpfiles.each { |tmpfile| FileUtils.rm_rf(tmpfile) }
       stop_redis
-      FileUtils.rm_rf @opts[:node_tmp_dir]
     end
 
    describe "create and restore backup jobs" do
@@ -72,18 +87,38 @@ module VCAP::Services::Mysql::Backup
                                 :node_id             => @opts[:node_id],
                                 :backup_id           => backup_id,
                                 :metadata            => {:trigger_by      => trigger_by,
-                                                         :service_version => "5.6"}
+                                                         :properties      => {
+                                                           :service_version => "5.6"}
+                                                        }
                                )
 
         # only supports warden
         data_dir = @config["mysqld"]["5.6"]["datadir"]
         file_to_check = File.join(data_dir, service_id_for_restore, "data", "ibdata1")
         File.exists?(file_to_check).should == true
-        @tmpfiles << File.join(data_dir, service_id_for_restore)
+      end
+
+      def check_data_in_new_db(service_id_for_restore)
+        EM.run do
+          creds = {
+            "service_id" => service_id_for_restore,
+            "name"       => @db["name"],
+            "user"       => @db["user"],
+            "password"   => @db["password"],
+          }
+          db = @node.provision(@default_plan, creds, @default_version, {"is_restoring" => true})
+          @test_dbs << db
+          conn = connect_to_mysql(db)
+          conn.query("select * from test").each(:symbolize_keys => true) do |row|
+            [10, 20].should include(row[:id])
+          end
+
+          EM.stop
+        end
       end
 
       it "should be able to create full & incremental backups and restore them" do
-        service_id = @db_instance.service_id
+        service_id = @db["service_id"]
         backup_id = nil
         ["full", "incremental"].each do |type|
           backup_id = UUIDTools::UUID.random_create.to_s
@@ -106,8 +141,8 @@ module VCAP::Services::Mysql::Backup
           StorageClient.get_file("MyaaS", service_id, backup_id).should_not be_nil
         end
 
+        service_id_for_restore = UUIDTools::UUID.random_create.to_s
         EM.run do
-          service_id_for_restore = UUIDTools::UUID.random_create.to_s
           service_name = "MyaaS"
           subscribe_restore_channel(service_name, service_id_for_restore)
           restore_and_check(service_id_for_restore, service_id, backup_id, "auto")
@@ -118,10 +153,11 @@ module VCAP::Services::Mysql::Backup
           end
 
         end
+        check_data_in_new_db(service_id_for_restore)
       end
 
       it "should be able to handle user triggered backup & restore" do
-        service_id = @db_instance.service_id
+        service_id = @db["service_id"]
         service_id_for_restore = UUIDTools::UUID.random_create.to_s
         service_name = "MyaaS"
         backup_id = UUIDTools::UUID.random_create.to_s
@@ -158,6 +194,8 @@ module VCAP::Services::Mysql::Backup
             EM.stop
           end
         end
+
+        check_data_in_new_db(service_id_for_restore)
       end
     end
   end

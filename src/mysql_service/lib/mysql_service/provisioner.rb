@@ -29,6 +29,10 @@ class VCAP::Services::Mysql::Provisioner < VCAP::Services::Base::Provisioner
     VCAP::Services::Mysql::Backup::CreateBackupJob
   end
 
+  def restore_backup_job
+    VCAP::Services::Mysql::Backup::RestoreBackupJob
+  end
+
   def pre_send_announcement
     super
     %w[create_backup].each do |op|
@@ -97,7 +101,7 @@ class VCAP::Services::Mysql::Provisioner < VCAP::Services::Base::Provisioner
   # also contains info of all peers in multi-peers topology, a multi-peers aware
   # application can connect to both active and passive peer on demand.
   #
-  def generate_recipes(service_id, plan_config, version, best_nodes)
+  def generate_recipes(service_id, plan_config, version, best_nodes, original_creds=nil)
     credentials = {}
     configuration = {
       "version" => version,
@@ -107,6 +111,11 @@ class VCAP::Services::Mysql::Provisioner < VCAP::Services::Base::Provisioner
     name = 'd' + generate_credential(password_length)
     user = 'u' + generate_credential(password_length)
     password = 'p' + generate_credential(password_length)
+
+    # restoring from another instance
+    if original_creds && original_creds.key?("name")
+      name, user, password = %w(name user password).map { |key| original_creds[key] }
+    end
 
     # configure active node
     active_node = best_nodes.shift
@@ -205,7 +214,7 @@ class VCAP::Services::Mysql::Provisioner < VCAP::Services::Base::Provisioner
     if backup_job_resp.success
       @logger.info("Backup job #{backup_job_resp.properties} succeeded")
     else
-      @logger.warn("Backup job #{backup_job_resp.properties} failed due to #{resp_to_controller.error}")
+      @logger.warn("Backup job #{backup_job_resp.properties} failed due to #{backup_job_resp.error}")
     end
 
     properties = backup_job_resp.properties

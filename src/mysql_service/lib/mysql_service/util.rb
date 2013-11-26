@@ -20,7 +20,7 @@ module VCAP
         end
 
         def generate_service_id
-          SecureRandom.uuid.to_s.gsub("-", "")[0, dbname_length]
+          SecureRandom.uuid
         end
 
         def generate_credential(length=12)
@@ -79,13 +79,13 @@ module VCAP
           env = {}
           path_variable = (ENV["PATH"] && ENV["PATH"].dup) || ""
           path_change = ""
-          path_change.prepend("#{opts[:perl_bin]}:") if opts[:perl_bin]
-          path_change.prepend("#{opts[:xtrabackup_bin]}:") if opts[:xtrabackup_bin]
+          path_change = "#{opts[:perl_bin]}:#{path_change}" if opts[:perl_bin]
+          path_change = "#{opts[:xtrabackup_bin]}:#{path_change}" if opts[:xtrabackup_bin]
           env["PATH"] = path_change + path_variable unless path_change == ""
 
           if opts[:dbd_mysql_lib]
             perl5lib_variable = (ENV["PERL5LIB"] && ENV["PERL5LIB"].dup) || ""
-            perl5lib_variable.prepend("#{opts[:dbd_mysql_lib]}:")
+            perl5lib_variable = "#{opts[:dbd_mysql_lib]}:#{perl5lib_variable}"
             env["PERL5LIB"] = perl5lib_variable
           end
           env
@@ -133,7 +133,7 @@ module VCAP
           raise "Failed to execute backup command to #{host}" unless res
           output = File.read(output_file)
           backup_folder = output.match(/Backup created in directory '(.+)'/)[1]
-          last_lsn = output.match(/log scanned up to \((\d+)\)/)[1]
+          last_lsn = output.match(/The latest check point \(for incremental\): '(\d+)'/)[1]
           raise "Can't get necessary data from backup output" unless backup_folder && last_lsn
           dest_folder = File.join(File.dirname(backup_folder), dest_folder_name)
           FileUtils.mv(backup_folder, dest_folder)
