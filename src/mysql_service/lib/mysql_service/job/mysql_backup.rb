@@ -114,7 +114,7 @@ module VCAP::Services::Mysql::Backup
         backup_conf[:last_backup] = instance_backup_info[:last_backup]
       end
 
-      result = backup_mysql_server(@type, mysql_conf, mysqld_properties, dump_path, backup_conf)
+      result = backup_mysql_server(backup_id, @type, mysql_conf, mysqld_properties, dump_path, backup_conf)
       raise "Backup Error" unless result
       backup = {
         :files => result[:files],
@@ -127,7 +127,7 @@ module VCAP::Services::Mysql::Backup
           }
         }
       }
-      backup[:single_backup][:previous_backup] = backup_conf["last_backup"] if @type == "incremental"
+      backup[:single_backup][:previous_backup] = backup_conf[:last_backup] if @type == "incremental"
 
       backup[:instance_info] = {
           :last_lsn => result[:last_lsn],
@@ -137,4 +137,86 @@ module VCAP::Services::Mysql::Backup
       backup
     end
   end
+
+  class RestoreBackupJob < BackupJob
+    include VCAP::Services::Mysql::Util
+    include VCAP::Services::Mysql::Common
+    include Common
+
+    BACKUP_CHANNEL = "restore_backup".freeze
+
+    def perform
+      begin
+        required_options :service_id, :original_service_id, :backup_id
+        @name = options["service_id"]
+        @original_service_id = options["original_service_id"]
+        @backup_id = options["backup_id"]
+        @metadata = VCAP.symbolize_keys(options["metadata"])
+        @type = @metadata[:type]
+        @logger.info("Launch job: #{self.class} for #{name} with metadata: #{@metadata}")
+
+        @backup_files = []
+        @data_dir = nil
+        response = SimpleResponse.new
+        lock = create_lock
+        lock.lock do
+          result = execute
+          @logger.info("Results of restore backup: #{result}")
+
+          response.success = true
+          send_msg("#{service_name}.#{BACKUP_CHANNEL}.#{name}", response.encode) do
+            FileUtils.rm_rf(File.dirname(@data_dir), :secure => true) if @data_dir
+          end
+
+          completed(Yajl::Encoder.encode({:result => :ok}))
+          @logger.info("Complete job: #{self.class} for #{name}")
+        end
+      rescue => e
+        # remove the parenet folder which is the instance folder
+        FileUtils.rm_rf(File.dirname(@data_dir), :secure => true) if @data_dir
+        response.success = false
+        response.error = handle_error(e)
+        send_msg("#{service_name}.#{BACKUP_CHANNEL}.#{name}", response.encode)
+      ensure
+        set_status({:complete_time => Time.now.to_s})
+        @backup_files.each{|f| FileUtils.rm_rf(f, :secure => true) if File.exists? f} if @backup_files
+      end
+    end
+
+    def execute
+      use_warden = @config["use_warden"] || false
+      dump_path = get_dump_path
+      backup_ids = [@backup_id]
+
+      unless @metadata[:trigger_by] == "user"
+        bid = @backup_id
+        loop do
+          info = DBClient.get_single_backup_info(@original_service_id, bid)
+          bid = info[:previous_backup]
+          bid.nil? ? break : backup_ids.unshift(bid)
+        end
+      end
+
+      backup_ids.each do |id|
+        package_file = File.join(dump_path, "#{id}.zip")
+        StorageClient.get_file(service_name, @original_service_id, id, package_file)
+        @backup_files << package_file
+        package = VCAP::Services::Base::AsyncJob::Package.load(package_file)
+        package.unpack(dump_path)
+        @backup_files << File.join(dump_path, id)
+        @logger.debug("Unpack files from #{package_file} of instance #{@original_service_id}")
+      end
+      backup_folders = backup_ids.map { |id| File.join(dump_path, id) }
+
+      mysqld_properties = @config["mysqld"][@metadata[:service_version]]
+      @data_dir = mysqld_properties["datadir"]
+      @data_dir << "/#{name}/data" if use_warden
+      backup_conf = VCAP.symbolize_keys(@config["backup"] || {})
+      result = restore_mysql_server(@data_dir, backup_folders, backup_conf)
+      raise "Failed to execute restore command to #{name}" unless result
+
+      true
+    end
+  end
+
 end
