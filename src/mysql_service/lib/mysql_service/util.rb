@@ -75,24 +75,44 @@ module VCAP
           res
         end
 
-        def backup_mysql_server(type, mysql_config, mysqld_properties, dump_path, opts)
+        def prepare_env(opts)
+          env = {}
+          path_variable = (ENV["PATH"] && ENV["PATH"].dup) || ""
+          path_change = ""
+          path_change.prepend("#{opts[:perl_bin]}:") if opts[:perl_bin]
+          path_change.prepend("#{opts[:xtrabackup_bin]}:") if opts[:xtrabackup_bin]
+          env["PATH"] = path_change + path_variable unless path_change == ""
+
+          if opts[:dbd_mysql_lib]
+            perl5lib_variable = (ENV["PERL5LIB"] && ENV["PERL5LIB"].dup) || ""
+            perl5lib_variable.prepend("#{opts[:dbd_mysql_lib]}:")
+            env["PERL5LIB"] = perl5lib_variable
+          end
+          env
+        end
+
+        def with_env(env = {})
+          old_env = {}
+          env.each do |key, value|
+            old_env[key] = ENV[key]
+            ENV[key] = value
+          end
+          yield
+          old_env.each { |key, value| value.nil? ? ENV.delete(key) : ENV[key] = value }
+        end
+
+        def backup_mysql_server(dest_folder_name, type, mysql_config, mysqld_properties, dump_path, opts)
           raise ArgumentError, "Missing options." unless type && mysql_config &&
                                                          mysqld_properties && dump_path
           raise ArgumentError, "Unknown backup type" unless ["full", "incremental"].include? type
           make_logger
           host, user, password, port = %w{host user pass port}.map { |opt| mysql_config[opt] }
 
-          cmd = ""
-          path_variable = "$PATH"
-          path_variable = "#{opts[:perl_bin]}:#{path_variable}" if opts[:perl_bin]
-          path_variable = "#{opts[:xtrabackup_bin]}:#{path_variable}" if opts[:xtrabackup_bin]
-          cmd << "export PATH=#{path_variable};"
-          cmd << "export PERL5LIB=$PERL5LIB:#{opts[:dbd_mysql_lib]};" if opts[:dbd_mysql_lib]
-
-          cmd << "innobackupex --host=#{host} --port=#{port} --user=#{user} --password=#{password} "
+          env = prepare_env(opts)
+          cmd = "innobackupex --host=#{host} --port=#{port} --user=#{user} --password=#{password} "
 
           defaults_file = "#{dump_path}/my.cnf"
-          output_file = "#{dump_path}/backup_outpput"
+          output_file = "#{dump_path}/backup_output"
           File.open(defaults_file, "w") do |f|
             f.write("[mysqld]\n")
             mysqld_properties.each { |k, v| f.write("#{k}=#{v}\n") }
@@ -109,20 +129,73 @@ module VCAP
           on_err = Proc.new do |command, code, msg|
             raise "CMD '#{command}' exit with code: #{code}. Message: #{msg}"
           end
-          res = VCAP::Services::Base::CMDHandle.execute(cmd, nil, on_err)
+          res = nil
+          with_env(env) { res = VCAP::Services::Base::CMDHandle.execute(cmd, nil, on_err) }
 
-          raise "Failed to execute dump command to #{host}" unless res
+          raise "Failed to execute backup command to #{host}" unless res
           output = File.read(output_file)
           backup_folder = output.match(/Backup created in directory '(.+)'/)[1]
           last_lsn = output.match(/log scanned up to \((\d+)\)/)[1]
           raise "Can't get necessary data from backup output" unless backup_folder && last_lsn
-          {:files => [backup_folder], :last_lsn => last_lsn }
+          dest_folder = File.join(File.dirname(backup_folder), dest_folder_name)
+          FileUtils.mv(backup_folder, dest_folder)
+          {:files => [dest_folder], :last_lsn => last_lsn }
         rescue => e
           @logger.error("Error backup server on host #{host}: #{fmt_error(e)}")
           nil
         ensure
-          FileUtils.rm_rf(defaults_file, :secure => true)
-          FileUtils.rm_rf(output_file, :secure => true)
+          FileUtils.rm_rf(defaults_file, :secure => true) if defaults_file
+          FileUtils.rm_rf(output_file, :secure => true) if output_file
+        end
+
+        def restore_mysql_server(dest_folder, backup_folders, opts)
+          raise "Invalid backup folders" if backup_folders.empty?
+          FileUtils.mkdir_p(dest_folder)
+
+          output_files = backup_folders.map { |f| "#{f}.output" }
+          env = prepare_env(opts)
+          base_folder = backup_folders.shift
+          base_cmd = "innobackupex --apply-log --redo-only #{base_folder}"
+          base_output = output_files.shift
+          last_apply_output = "#{base_output}.apply_redo"
+          cmds = []
+          cmds << "#{base_cmd} > #{base_output} 2>&1"
+          backup_folders.size.times do |i|
+            cmds << "#{base_cmd} --incremental-dir=#{backup_folders[i]} > #{output_files[i]} 2>&1"
+          end
+          cmds << "innobackupex --apply-log #{base_folder} > #{last_apply_output} 2>&1"
+          cmds << "rm #{base_folder}/*.cnf"
+          cmds << "cp -r #{base_folder}/* #{dest_folder}"
+          # mod will be changed again in warden
+          cmds << "chmod -R 777 #{dest_folder}/*"
+
+          output_files.unshift(base_output)
+          output_files.unshift(last_apply_output)
+
+          on_err = Proc.new do |command, code, msg|
+            raise "CMD '#{command}' exit with code: #{code}. Message: #{msg}"
+          end
+          res = true
+          cmds.each do |cmd|
+            with_env(env) do
+              @logger.info("Take command: #{cmd}")
+              result = VCAP::Services::Base::CMDHandle.execute(cmd, nil, on_err)
+              return nil unless result
+            end
+          end
+          output_files.each do |f|
+            output = File.read(f)
+            unless output =~ /innobackupex: completed OK!/
+              @logger.error("Innobackupex cannot apply log for #{File.basename(f, '.*')}")
+              return nil
+            end
+          end
+          res
+        rescue => e
+          @logger.error("Error restore server to #{dest_folder}: #{fmt_error(e)}")
+          nil
+        ensure
+          output_files.each { |f| FileUtils.rm_rf(f, :secure => true) } if output_files
         end
 
         def handle_discarded_routines(db_name, connection)
