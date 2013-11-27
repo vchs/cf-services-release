@@ -33,7 +33,7 @@ module VCAP::Services::Mysql::Backup
         @node = VCAP::Services::Mysql::Node.new(@opts)
         EM.add_timer(1) do
           @db = @node.provision(@opts[:plan], nil, default_version)
-          @db_instance = @node.mysqlProvisionedService.get(@db["name"])
+          @db_instance = @node.mysqlProvisionedService.get(@db["service_id"])
           EM.stop
         end
       end if @use_warden
@@ -41,14 +41,14 @@ module VCAP::Services::Mysql::Backup
 
     after :all do
       EM.run do
-        @node.unprovision(@db["name"], [])
+        @node.unprovision(@db["service_id"], [])
         EM.stop
       end if @use_warden
       stop_redis
     end
 
     it "should be able to create full & incremental backup" do
-      service_id = @db_instance.name
+      service_id = @db_instance.service_id
       ["full", "incremental"].each do |type|
         backup_id = UUIDTools::UUID.random_create.to_s
         job_id = CreateBackupJob.create(:service_id => service_id,
@@ -72,7 +72,7 @@ module VCAP::Services::Mysql::Backup
     end
 
     it "should be able to handle user triggered backup" do
-      service_id = @db_instance.name
+      service_id = @db_instance.service_id
       service_name = "MyaaS"
       backup_id = UUIDTools::UUID.random_create.to_s
       EM.run do

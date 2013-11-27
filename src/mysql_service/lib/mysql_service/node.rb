@@ -133,17 +133,17 @@ class VCAP::Services::Mysql::Node
   end
 
   def all_instances_list
-    mysqlProvisionedService.all.map { |s| s.name }
+    mysqlProvisionedService.all.map { |s| s.service_id }
   end
 
   def all_bindings_list
     res = []
     all_ins_users = mysqlProvisionedService.all.map { |s| s.user }
-    each_connection_with_port do |connection, port|
+    each_connection_with_key_and_port do |connection, key, port|
       # we can't query plaintext password from mysql since it's encrypted.
       connection.query('select DISTINCT user.user,db from user, db where user.user = db.user and length(user.user) > 0').each do |entry|
         # Filter out the instances handles
-        res << gen_credential(entry["db"], entry["user"], "fake-password", port) unless all_ins_users.include?(entry["user"])
+        res << gen_credential(key, entry["db"], entry["user"], "fake-password", port) unless all_ins_users.include?(entry["user"])
       end
     end
     res
@@ -204,7 +204,7 @@ class VCAP::Services::Mysql::Node
 
   def node_ready?()
     mysqlProvisionedService.all.each do |instance|
-      conn_pool = fetch_pool(instance.name)
+      conn_pool = fetch_pool(instance.service_id)
       return false unless conn_pool && conn_pool.connected?
     end
     true
@@ -301,20 +301,22 @@ class VCAP::Services::Mysql::Node
     tried_free_port = false
     begin
       if credential
-        name, user, password = %w(name user password).map { |key| credential[key] }
-        provisioned_service = mysqlProvisionedService.create(new_port(credential["port"]), name, user, password, version)
+        # name: the database name
+        service_id, name, user, password = %w(service_id name user password).map { |key| credential[key] }
+        provisioned_service = mysqlProvisionedService.create(new_port(credential["port"]), service_id, name, user, password, version)
       else
         # mysql database name should start with alphabet character
-        name = 'd' + UUIDTools::UUID.random_create.to_s.gsub(/-/, '')
-        user = 'u' + generate_credential
-        password = 'p' + generate_credential
-        provisioned_service = mysqlProvisionedService.create(new_port, name, user, password, version)
+        service_id = generate_service_id
+        name = 'd' + generate_credential(password_length)
+        user = 'u' + generate_credential(password_length)
+        password = 'p' + generate_credential(password_length)
+        provisioned_service = mysqlProvisionedService.create(new_port, service_id, name, user, password, version)
       end
       provisioned_service.run do |instance|
         setup_pool(instance)
         raise "Could not create database" unless create_database(instance)
       end
-      response = gen_credential(provisioned_service.name, provisioned_service.user, provisioned_service.password, get_port(provisioned_service))
+      response = gen_credential(provisioned_service.service_id, provisioned_service.name, provisioned_service.user, provisioned_service.password, get_port(provisioned_service))
       @statistics_lock.synchronize do
         @provision_served += 1
       end
@@ -325,7 +327,7 @@ class VCAP::Services::Mysql::Node
         port = credential["port"]
         @logger.warn("Found an occupied port #{port}, " \
                      "try to delete the instance with this port")
-        ids = mysqlProvisionedService.all(:port => port).map{ |ins| ins.name }
+        ids = mysqlProvisionedService.all(:port => port).map{ |ins| ins.service_id }
         ids.each{ |id| unprovision(id, []) }
         tried_free_port = true
         retry
@@ -336,11 +338,11 @@ class VCAP::Services::Mysql::Node
     end
   end
 
-  def unprovision(name, credentials)
-    return if name.nil?
-    @logger.debug("Unprovision database:#{name} and its #{credentials.size} bindings")
-    provisioned_service = mysqlProvisionedService.get(name)
-    raise MysqlError.new(MysqlError::MYSQL_CONFIG_NOT_FOUND, name) if provisioned_service.nil?
+  def unprovision(service_id, credentials)
+    return if service_id.nil?
+    @logger.debug("Unprovision database:#{service_id} and its #{credentials.size} bindings")
+    provisioned_service = mysqlProvisionedService.get(service_id)
+    raise MysqlError.new(MysqlError::MYSQL_CONFIG_NOT_FOUND, service_id) if provisioned_service.nil?
     # Delete all bindings, ignore not_found error since we are unprovision
     begin
       credentials.each { |credential| unbind(credential) } if credentials
@@ -351,16 +353,16 @@ class VCAP::Services::Mysql::Node
     delete_database(provisioned_service)
 
     help_unprovision(provisioned_service)
-    @logger.debug("Successfully fulfilled unprovision request: #{name}")
+    @logger.debug("Successfully fulfilled unprovision request: #{service_id}")
     true
   end
 
-  def bind(name, bind_options, credential=nil)
-    @logger.debug("Bind service for db:#{name}, bind_options = #{bind_options}")
+  def bind(service_id, bind_options, credential=nil)
+    @logger.debug("Bind service for instance:#{service_id}, bind_options = #{bind_options}")
     binding = nil
     begin
-      service = mysqlProvisionedService.get(name)
-      raise MysqlError.new(MysqlError::MYSQL_CONFIG_NOT_FOUND, name) unless service
+      service = mysqlProvisionedService.get(service_id)
+      raise MysqlError.new(MysqlError::MYSQL_CONFIG_NOT_FOUND, service_id) unless service
       # create new credential for binding
       binding = Hash.new
       if credential
@@ -373,20 +375,20 @@ class VCAP::Services::Mysql::Node
       binding[:bind_options] = bind_options
 
       begin
-        create_database_user(name, binding[:user], binding[:password], binding[:bind_options])
+        create_database_user(service_id, service.name, binding[:user], binding[:password], binding[:bind_options])
         enforce_instance_storage_quota(service)
       rescue Mysql2::Error => e
         raise "Could not create database user: [#{e.errno}] #{e.error}"
       end
 
-      response = gen_credential(name, binding[:user], binding[:password], get_port(service))
+      response = gen_credential(service_id, service.name, binding[:user], binding[:password], get_port(service))
       @logger.debug("Bind response: #{response.inspect}")
       @statistics_lock.synchronize do
         @binding_served += 1
       end
       return response
     rescue => e
-      delete_database_user(binding[:user], name) if binding
+      delete_database_user(binding[:user], service_id) if binding
       raise e
     end
   end
@@ -394,16 +396,16 @@ class VCAP::Services::Mysql::Node
   def unbind(credential)
     return if credential.nil?
     @logger.debug("Unbind service: #{credential.inspect}")
-    name, user, bind_opts, passwd = %w(name user bind_opts password).map { |k| credential[k] }
+    service_id, name, user, bind_opts, passwd = %w(service_id name user bind_opts password).map { |k| credential[k] }
 
     # Special case for 'ancient' instances that don't have new credentials for each Bind operation.
     # Never delete a user that was created as part of the initial provisioning process.
     @logger.debug("Begin check ancient credentials.")
-    mysqlProvisionedService.all(:name => name, :user => user).each { |record| @logger.info("Find unbind credential in local database: #{record.inspect}. Skip delete account."); return true }
+    mysqlProvisionedService.all(:service_id => service_id, :user => user).each { |record| @logger.info("Find unbind credential in local database: #{record.inspect}. Skip delete account."); return true }
     @logger.debug("Ancient credential not found.")
 
     # validate the existence of credential, in case we delete a normal account because of a malformed credential
-    conn_pool = fetch_pool(name)
+    conn_pool = fetch_pool(service_id)
     if conn_pool.nil?
       @logger.error("fail to fetch connection pool for #{credential.inspect}")
       return
@@ -412,7 +414,7 @@ class VCAP::Services::Mysql::Node
       res = connection.query("SELECT * from mysql.user WHERE user='#{user}'")
       raise MysqlError.new(MysqlError::MYSQL_CRED_NOT_FOUND, credential.inspect) if res.count() <= 0
     end
-    delete_database_user(user, name)
+    delete_database_user(user, service_id)
     conn_pool.with_connection do |connection|
       handle_discarded_routines(name, connection)
     end
@@ -420,14 +422,15 @@ class VCAP::Services::Mysql::Node
   end
 
   def create_database(provisioned_service)
-    name, password, user = [:name, :password, :user].map { |field| provisioned_service.send(field) }
+    service_id, name, password, user = [:service_id, :name, :password, :user].map { |field| provisioned_service.send(field) }
+
     begin
       start = Time.now
       @logger.debug("Creating: #{provisioned_service.inspect}")
-      fetch_pool(name).with_connection do |connection|
+      fetch_pool(service_id).with_connection do |connection|
         connection.query("CREATE DATABASE #{name}")
       end
-      create_database_user(name, user, password, {"privileges" => ["FULL"]})
+      create_database_user(service_id, name, user, password, {"privileges" => ["FULL"]})
       @logger.debug("Done creating #{provisioned_service.inspect}. Took #{Time.now - start}.")
       return true
     rescue Mysql2::Error => e
@@ -436,12 +439,12 @@ class VCAP::Services::Mysql::Node
     end
   end
 
-  def create_database_user(database, username, password, binding_options={"privileges"=>["FULL"]})
-    @logger.info("Creating credentials: #{username}/#{password} for database #{database}")
+  def create_database_user(service_id, database, username, password, binding_options={"privileges"=>["FULL"]})
+    @logger.info("Creating credentials: #{username}/#{password} for instance #{service_id}")
     raise "Invalid binding options format #{binding_options.inspect}" unless binding_options.kind_of?(Hash) && binding_options["privileges"]
     binding_privileges = binding_options["privileges"]
     raise "Invalid binding privileges type #{binding_privileges.class}" unless binding_privileges.kind_of?(Array)
-    fetch_pool(database).with_connection do |connection|
+    fetch_pool(service_id).with_connection do |connection|
       grant = { "FULL" => "ALL", "READ_ONLY" => "SELECT" }
       binding_privileges.each do |privilege|
         ['%', 'localhost'].each do |host|
@@ -454,11 +457,11 @@ class VCAP::Services::Mysql::Node
   end
 
   def delete_database(provisioned_service)
-    name, user = [:name, :user].map { |field| provisioned_service.send(field) }
+    service_id, name, user = [:service_id, :name, :user].map { |field| provisioned_service.send(field) }
     begin
-      delete_database_user(user, name)
+      delete_database_user(user, service_id)
       @logger.info("Deleting database: #{name}")
-      fetch_pool(name).with_connection do |connection|
+      fetch_pool(service_id).with_connection do |connection|
         connection.query("DROP DATABASE #{name}")
       end
     rescue Mysql2::Error => e
@@ -466,11 +469,11 @@ class VCAP::Services::Mysql::Node
     end
   end
 
-  def delete_database_user(user, name)
+  def delete_database_user(user, service_id)
     @logger.info("Delete user #{user}")
     @delete_user_lock.synchronize do
       ["%", "localhost"].each do |host|
-        fetch_pool(name).with_connection do |connection|
+        fetch_pool(service_id).with_connection do |connection|
           res = connection.query("SELECT user from mysql.user where user='#{user}' and host='#{host}'")
           if res.count == 1
             connection.query("DROP USER #{user}@'#{host}'")
@@ -479,16 +482,16 @@ class VCAP::Services::Mysql::Node
           end
         end
       end
-      kill_user_session(user, name)
+      kill_user_session(user, service_id)
     end
   rescue Mysql2::Error => e
     @logger.error("Could not delete user '#{user}': [#{e.errno}] #{e.error}")
   end
 
-  def kill_user_session(user, name)
+  def kill_user_session(user, service_id)
     @logger.info("Kill sessions of user: #{user}")
     begin
-      fetch_pool(name).with_connection do |connection|
+      fetch_pool(service_id).with_connection do |connection|
         process_list = connection.query("show processlist")
         process_list.each do |proc|
           thread_id, user_, db, command, time, info = proc["Id"], proc["User"], proc["db"], proc["Command"], proc["Time"], proc["Info"]
@@ -505,12 +508,13 @@ class VCAP::Services::Mysql::Node
   end
 
   # restore a given instance using backup file.
-  def restore(name, backup_path)
-    @logger.debug("Restore db #{name} using backup at #{backup_path}")
-    service = mysqlProvisionedService.get(name)
-    raise MysqlError.new(MysqlError::MYSQL_CONFIG_NOT_FOUND, name) unless service
+  def restore(service_id, backup_path)
+    @logger.debug("Restore instance #{service_id} using backup at #{backup_path}")
+    service = mysqlProvisionedService.get(service_id)
+    name = service.name
+    raise MysqlError.new(MysqlError::MYSQL_CONFIG_NOT_FOUND, service_id) unless service
 
-    fetch_pool(name).with_connection do |connection|
+    fetch_pool(service_id).with_connection do |connection|
       # revoke write and lock privileges to prevent race with drop database.
       connection.query("UPDATE db SET insert_priv='N', create_priv='N',
                          update_priv='N', lock_tables_priv='N' WHERE Db='#{name}'")
@@ -526,7 +530,7 @@ class VCAP::Services::Mysql::Node
       connection.query("FLUSH PRIVILEGES")
     end
     host, user, pass, port, socket, mysql_bin = instance_configs(service)
-    path = File.join(backup_path, "#{name}.sql.gz")
+    path = File.join(backup_path, "#{service_id}.sql.gz")
     cmd = "#{@gzip_bin} -dc #{path}|" +
       "#{mysql_bin} -h #{host} --port='#{port}' --user='#{user}' --password='#{pass}'"
     cmd += " -S #{socket}" unless socket.nil?
@@ -534,7 +538,7 @@ class VCAP::Services::Mysql::Node
     o, e, s = exe_cmd(cmd)
     if s.exitstatus == 0
       # delete the procedures and functions: security_type is definer while the definer doesn't exist
-      fetch_pool(name).with_connection do |connection|
+      fetch_pool(service_id).with_connection do |connection|
         handle_discarded_routines(name, connection)
       end
       return true
@@ -548,7 +552,7 @@ class VCAP::Services::Mysql::Node
 
   # Disable all credentials and kill user sessions
   def disable_instance(prov_cred, binding_creds)
-    @logger.debug("Disable instance #{prov_cred["name"]} request.")
+    @logger.debug("Disable instance #{prov_cred["service_id"]} request.")
     binding_creds << prov_cred
     binding_creds.each do |cred|
       unbind(cred)
@@ -561,13 +565,14 @@ class VCAP::Services::Mysql::Node
 
   # Dump db content into given path
   def dump_instance(prov_cred, binding_creds, dump_file_path)
-    @logger.debug("Dump instance #{prov_cred["name"]} request.")
-    name = prov_cred["name"]
-    service = mysqlProvisionedService.get(name)
-    File.open(File.join(dump_file_path, "#{name}.service"), 'w') { |f| Marshal.dump(service, f) }
+    @logger.debug("Dump instance #{prov_cred["service_id"]} request.")
+    service_id = prov_cred["service_id"]
+    service = mysqlProvisionedService.get(service_id)
+    name = service.name
+    File.open(File.join(dump_file_path, "#{service_id}.service"), 'w') { |f| Marshal.dump(service, f) }
     host, user, password, port, socket, _, mysqldump_bin = instance_configs(service)
-    dump_file = File.join(dump_file_path, "#{name}.sql")
-    @logger.info("Dump instance #{name} content to #{dump_file}")
+    dump_file = File.join(dump_file_path, "#{service_id}.sql")
+    @logger.info("Dump instance #{service_id} content to #{dump_file}")
     cmd = "#{mysqldump_bin} -h #{host} --port='#{port}' --user='#{user}' --password='#{password}' -R --single-transaction #{'-S '+socket if socket} #{name} > #{dump_file}"
     o, e, s = exe_cmd(cmd)
     if s.exitstatus == 0
@@ -583,23 +588,24 @@ class VCAP::Services::Mysql::Node
   # Provision and import dump files
   # Refer to #dump_instance
   def import_instance(prov_cred, binding_creds_hash, dump_file_path, plan)
-    @logger.debug("Import instance #{prov_cred["name"]} request.")
+    @logger.debug("Import instance #{prov_cred["service_id"]} request.")
     @logger.info("Provision an instance with plan: #{plan} using data from #{prov_cred.inspect}")
 
-    name = prov_cred["name"]
-    dump_service = File.join(dump_file_path, "#{name}.service")
+    service_id = prov_cred["service_id"]
+    dump_service = File.join(dump_file_path, "#{service_id}.service")
     service = File.open(dump_service, 'r') { |f| Marshal.load(f) }
     raise "Cannot parse dumpfile in #{dump_service}" if service.nil?
     provision(plan, prov_cred, service.version)
-    provisioned_service = mysqlProvisionedService.get(name)
-    import_file = File.join(dump_file_path, "#{name}.sql")
+    provisioned_service = mysqlProvisionedService.get(service_id)
+    name = provisioned_service.name
+    import_file = File.join(dump_file_path, "#{service_id}.sql")
     host, user, password, port, socket, mysql_bin = instance_configs(provisioned_service)
-    @logger.info("Import data from #{import_file} to database #{name}")
+    @logger.info("Import data from #{import_file} to database #{name} of instance #{service_id}")
     cmd = "#{mysql_bin} --host=#{host} --port='#{port}' --user='#{user}' --password='#{password}' #{'-S '+socket if socket} #{name} < #{import_file}"
     o, e, s = exe_cmd(cmd)
     if s.exitstatus == 0
       # delete the procedures and functions: security_type is definer while the definer doesn't exist
-      fetch_pool(name).with_connection do |connection|
+      fetch_pool(service_id).with_connection do |connection|
         handle_discarded_routines(name, connection)
       end
       return true
@@ -623,12 +629,12 @@ class VCAP::Services::Mysql::Node
   # Re-bind credentials
   # Refer to #disable_instance
   def enable_instance(prov_cred, binding_creds_hash)
-    @logger.debug("Enable instance #{prov_cred["name"]} request.")
-    prov_cred = bind(prov_cred["name"], {"privileges"=>["FULL"]}, prov_cred)
+    @logger.debug("Enable instance #{prov_cred["service_id"]} request.")
+    prov_cred = bind(prov_cred["service_id"], {"privileges"=>["FULL"]}, prov_cred)
     binding_creds_hash.each_value do |v|
       cred = v["credentials"]
       binding_opts = v["binding_options"]
-      bind(cred["name"], binding_opts, cred)
+      bind(cred["service_id"], binding_opts, cred)
     end
     true
   rescue => e
@@ -638,12 +644,12 @@ class VCAP::Services::Mysql::Node
 
   def update_instance(prov_cred, binding_creds_hash)
     @logger.debug("Update instance #{prov_cred["name"]} handles request.")
-    name = prov_cred["name"]
-    prov_cred = bind(name, {"privileges"=>["FULL"]}, prov_cred)
+    service_id = prov_cred["service_id"]
+    prov_cred = bind(service_id, {"privileges"=>["FULL"]}, prov_cred)
     binding_creds_hash.each_value do |v|
       cred = v["credentials"]
       binding_opts = v["binding_options"]
-      v["credentials"] = bind(name, binding_opts, cred)
+      v["credentials"] = bind(service_id, binding_opts, cred)
     end
     [prov_cred, binding_creds_hash]
   rescue => e
@@ -688,7 +694,7 @@ class VCAP::Services::Mysql::Node
     varz[:instances] = {}
     begin
       mysqlProvisionedService.all.each do |instance|
-        varz[:instances][instance.name.to_sym] = get_status(instance)
+        varz[:instances][instance.service_id.to_sym] = get_status(instance)
       end
     rescue => e
       @logger.error("Error get instance list: #{e}")
@@ -718,15 +724,15 @@ class VCAP::Services::Mysql::Node
         :socket => socket,
       )
     rescue => e
-      @logger.warn("Error get status of #{instance.name}: #{e}")
+      @logger.warn("Error get status of #{instance.service_id}: #{e}")
       res = "fail"
     end
 
     res
   end
 
-  def get_instance_health(name)
-    instance = mysqlProvisionedService.get(name)
+  def get_instance_health(service_id)
+    instance = mysqlProvisionedService.get(service_id)
     health = instance.nil? ? 'fail' : get_status(instance)
     { :health => health }
   end
@@ -756,7 +762,7 @@ class VCAP::Services::Mysql::Node
   def get_instance_status()
     total = []
 
-    each_connection do |connection|
+    each_connection_with_key do |connection, service_id|
       all_dbs = []
       result = connection.query('show databases')
       result.each { |db| all_dbs << db["Database"] }
@@ -773,6 +779,7 @@ class VCAP::Services::Mysql::Node
         name, size = i["name"], i["size"]
         next if system_dbs.include?(name)
         db_with_tables << name
+        db[:service_id] = service_id
         db[:name] = name
         db[:size] = size.to_i
         db[:max_size] = @max_db_size
@@ -780,17 +787,18 @@ class VCAP::Services::Mysql::Node
       end
       # handle empty db without table
       (all_dbs - db_with_tables - system_dbs).each do |db|
-        result << {:name => db, :size => 0, :max_size => @max_db_size}
+        result << {:service_id => service_id, :name => db, :size => 0, :max_size => @max_db_size}
       end
       total += result
     end
     total
   end
 
-  def gen_credential(database, username, password, port)
+  def gen_credential(service_id, database, username, password, port)
     host = get_host
 
     {
+      "service_id" => service_id,
       "name" => database,
       "hostname" => host,
       "host" => host,
@@ -816,8 +824,10 @@ class VCAP::Services::Mysql::Node
     each_connection_with_identifier { |conn, identifier| yield conn }
   end
 
-  def each_connection_with_port
-    each_connection_with_identifier { |conn, identifier| yield conn, extract_attr(identifier, :port) }
+  def each_connection_with_key_and_port
+    each_connection_with_identifier do |conn, identifier|
+      yield conn, extract_attr(identifier, :key), extract_attr(identifier, :port)
+    end
   end
 
   def each_connection_with_key
@@ -856,7 +866,8 @@ end
 
 class VCAP::Services::Mysql::Node::ProvisionedService
   include DataMapper::Resource
-  property :name, String, :key => true
+  property :service_id, String, :key => true
+  property :name, String, :required => true
   property :user, String, :required => true
   property :password, String, :required => true
   property :plan, Integer, :required => true
@@ -864,8 +875,9 @@ class VCAP::Services::Mysql::Node::ProvisionedService
   property :version, String
 
   class << self
-    def create(port, name, user, password, version)
+    def create(port, service_id, name, user, password, version)
       provisioned_service = new
+      provisioned_service.service_id = service_id
       provisioned_service.name = name
       provisioned_service.user = user
       provisioned_service.password = password
@@ -892,7 +904,8 @@ class VCAP::Services::Mysql::Node::WardenProvisionedService
   include DataMapper::Resource
   include VCAP::Services::Mysql::Util
 
-  property :name, String, :key => true
+  property :service_id, String, :key => true
+  property :name, String, :required => true
   property :port, Integer, :unique => true
   property :user, String, :required => true
   property :password, String, :required => true
@@ -905,9 +918,10 @@ class VCAP::Services::Mysql::Node::WardenProvisionedService
   private_class_method :new
 
   class << self
-    def create(port, name, user, password, version)
+    def create(port, service_id, name, user, password, version)
       raise "Parameter missing" unless port
       provisioned_service = new
+      provisioned_service.service_id = service_id
       provisioned_service.name = name
       provisioned_service.port = port
       provisioned_service.user = user

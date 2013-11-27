@@ -37,7 +37,7 @@ module VCAP::Services::Mysql::Snapshot
       mysql_conf = @config["mysql"][srv.version]
       mysql_conf["host"] = srv.ip if use_warden
 
-      result = dump_database(name, mysql_conf, dump_file_name, :mysqldump_bin => mysql_conf["mysqldump_bin"], :gzip_bin => @config["gzip_bin"])
+      result = dump_database(srv.name, mysql_conf, dump_file_name, :mysqldump_bin => mysql_conf["mysqldump_bin"], :gzip_bin => @config["gzip_bin"])
       raise "Failed to execute dump command to #{name}" unless result
 
       dump_file_size = -1
@@ -77,7 +77,7 @@ module VCAP::Services::Mysql::Snapshot
       manifest = @manifest
       @logger.debug("Manifest for snapshot: #{manifest}")
 
-      result = import_dumpfile(name, mysql_conf, instance_user, instance_pass, snapshot_file_path, :mysql_bin => mysql_conf["mysql_bin"], :gzip_bin => @config["gzip_bin"])
+      result = import_dumpfile(srv.name, mysql_conf, instance_user, instance_pass, snapshot_file_path, :mysql_bin => mysql_conf["mysql_bin"], :gzip_bin => @config["gzip_bin"])
       raise "Failed execute import command to #{name}" unless result
 
       true

@@ -8,6 +8,21 @@ module VCAP
       module Util
         VALID_CREDENTIAL_CHARACTERS = ("A".."Z").to_a + ("a".."z").to_a + ("0".."9").to_a
 
+        PASSWORD_LENGTH = 9
+        DBNAME_LENGTH = 9
+
+        def password_length
+          PASSWORD_LENGTH
+        end
+
+        def dbname_length
+          DBNAME_LENGTH
+        end
+
+        def generate_service_id
+          SecureRandom.uuid.to_s.gsub("-", "")[0, dbname_length]
+        end
+
         def generate_credential(length=12)
           Array.new(length) { VALID_CREDENTIAL_CHARACTERS[rand(VALID_CREDENTIAL_CHARACTERS.length)] }.join
         end

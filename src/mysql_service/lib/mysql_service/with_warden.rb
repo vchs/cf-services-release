@@ -32,11 +32,11 @@ module VCAP::Services::Mysql::WithWarden
 
   def handle_provision_exception(provisioned_service)
     return unless provisioned_service
-    name = provisioned_service.name
+    service_id = provisioned_service.service_id
     @pool_mutex.synchronize do
-      @pools[name].shutdown
-      @pools.delete(name)
-    end if @pools.has_key?(name)
+      @pools[service_id].shutdown
+      @pools.delete(service_id)
+    end if @pools.has_key?(service_id)
     free_port(provisioned_service.port)
     provisioned_service.delete
   end
@@ -46,13 +46,13 @@ module VCAP::Services::Mysql::WithWarden
   end
 
   def help_unprovision(provisioned_service)
-    name = provisioned_service.name
+    service_id = provisioned_service.service_id
     @pool_mutex.synchronize do
-      @pools[name].shutdown
-      @pools.delete(name)
+      @pools[service_id].shutdown
+      @pools.delete(service_id)
     end
     free_port(provisioned_service.port)
-    raise "Could not cleanup instance #{provisioned_service.name}" unless provisioned_service.delete
+    raise "Could not cleanup instance #{provisioned_service.service_id}" unless provisioned_service.delete
   end
 
   def is_service_started(instance)
@@ -73,7 +73,7 @@ module VCAP::Services::Mysql::WithWarden
     raise "Setup pool failed: can't connection to #{config}" unless conn
 
     @pool_mutex.synchronize do
-      @pools[instance.name] = conn
+      @pools[instance.service_id] = conn
     end
     conn
   end
@@ -89,7 +89,7 @@ module VCAP::Services::Mysql::WithWarden
     # we can't iterate using @pools.each because provision and unprovision
     # will change @pools. Changing @pools during @pools.each will cause an error
     mysqlProvisionedService.all.each do |instance|
-      conn_pool = fetch_pool(instance.name)
+      conn_pool = fetch_pool(instance.service_id)
       next if conn_pool.nil?
       yield conn_pool, instance
     end
@@ -98,7 +98,7 @@ module VCAP::Services::Mysql::WithWarden
   def extract_attr(identifier, attribute) #identifier is instance
     case attribute
     when :port then identifier.port
-    when :key  then identifier.name
+    when :key  then identifier.service_id
     end
   end
 

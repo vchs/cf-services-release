@@ -15,8 +15,6 @@ class VCAP::Services::Mysql::Provisioner < VCAP::Services::Base::Provisioner
   attr_reader :free_ports
   attr_accessor :custom_resource_manager
 
-  PASSWORD_LENGTH = 9
-  DBNAME_LENGTH = 9
   DEFAULT_PORTS_RANGE = (15000..16000)
   ACTIVE_ROLE = "active".freeze
   PASSIVE_ROLE = "passive".freeze
@@ -77,10 +75,6 @@ class VCAP::Services::Mysql::Provisioner < VCAP::Services::Base::Provisioner
     varz
   end
 
-  def generate_service_id
-    'd' + SecureRandom.uuid.to_s.gsub(/-/, '')[0, dbname_length]
-  end
-
   # direct operate the hash is safe since gateway is single threaded
   def get_node_port(node_id)
     node_free_ports = @free_ports[node_id]
@@ -114,14 +108,6 @@ class VCAP::Services::Mysql::Provisioner < VCAP::Services::Base::Provisioner
     DEFAULT_PORTS_RANGE
   end
 
-  def password_length
-    PASSWORD_LENGTH
-  end
-
-  def dbname_length
-    DBNAME_LENGTH
-  end
-
   ####
   # Generate mysql recipes for both single node(peer) and multiple peers topology.
   # recipes.configuration always contains information for all peers.
@@ -138,7 +124,7 @@ class VCAP::Services::Mysql::Provisioner < VCAP::Services::Base::Provisioner
       "plan" => plan_config.keys.first.to_s,
     }
     peers_config = []
-    name = service_id
+    name = 'd' + generate_credential(password_length)
     user = 'u' + generate_credential(password_length)
     password = 'p' + generate_credential(password_length)
 
@@ -146,7 +132,7 @@ class VCAP::Services::Mysql::Provisioner < VCAP::Services::Base::Provisioner
     active_node = best_nodes.shift
     active_creds = gen_credential(
       active_node["id"], name, user, password, active_node["host"],
-      get_node_port(active_node["id"])
+      get_node_port(active_node["id"]), service_id
     )
     active_peer_config = {
       "credentials" => active_creds,
@@ -159,7 +145,7 @@ class VCAP::Services::Mysql::Provisioner < VCAP::Services::Base::Provisioner
     best_nodes.each do |n|
       creds = gen_credential(
         n["id"], name, user, password, n["host"],
-        get_node_port(n["id"])
+        get_node_port(n["id"]), service_id
       )
       passive_peer_config = {
         "credentials" => creds,
@@ -181,7 +167,7 @@ class VCAP::Services::Mysql::Provisioner < VCAP::Services::Base::Provisioner
     @logger.error(e)
   end
 
-  def gen_credential(node_id, database, username, password, host, port)
+  def gen_credential(node_id, database, username, password, host, port, service_id)
     {
       "node_id" => node_id,
       "name" => database,
@@ -192,6 +178,7 @@ class VCAP::Services::Mysql::Provisioner < VCAP::Services::Base::Provisioner
       "username" => username,
       "password" => password,
       "uri" => generate_uri(username, password, host, port, database),
+      "service_id" => service_id,
     }
   end
 

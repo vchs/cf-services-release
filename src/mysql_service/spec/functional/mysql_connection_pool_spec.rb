@@ -32,8 +32,8 @@ describe 'Mysql Connection Pool Test', components: [:nats], hook: :all do
     EM.run do
       @node = VCAP::Services::Mysql::Node.new(@opts)
       EM.add_timer(1) do
-        @db = @node.provision(@opts[:plan], nil, @default_version);
-        @db_instance = @node.mysqlProvisionedService.get(@db["name"])
+        @db = @node.provision(@opts[:plan], nil, @default_version)
+        @db_instance = @node.mysqlProvisionedService.get(@db["service_id"])
         EM.stop
       end
     end if @use_warden

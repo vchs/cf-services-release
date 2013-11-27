@@ -73,6 +73,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
     # Create one db be default
     @db = @node.provision(@default_plan, nil, @default_version)
     @db.should_not == nil
+    @db["service_id"].should be
     @db["name"].should be
     @db["host"].should be
     @db["host"].should == @db["hostname"]
@@ -80,7 +81,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
     @db["user"].should == @db["username"]
     @db["password"].should be
     @test_dbs[@db] = []
-    @db_instance = @node.mysqlProvisionedService.get(@db["name"])
+    @db_instance = @node.mysqlProvisionedService.get(@db["service_id"])
   end
 
   def new_instance
@@ -89,7 +90,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
 
   it "should connect to mysql database" do
     EM.run do
-      expect {@node.fetch_pool(@db['name']).with_connection{|connection| connection.query("SELECT 1")}}.to_not raise_error
+      expect {@node.fetch_pool(@db['service_id']).with_connection{|connection| connection.query("SELECT 1")}}.to_not raise_error
       EM.stop
     end
   end
@@ -97,7 +98,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
   it "should report inconsistency between mysql and local db" do
     EM.run do
       name, user = @db["name"], @db["user"]
-      @node.fetch_pool(name).with_connection do |conn|
+      @node.fetch_pool(@db["service_id"]).with_connection do |conn|
         conn.query("delete from db where db='#{name}' and user='#{user}'")
       end
       result = @node.check_db_consistency
@@ -117,7 +118,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
 
   it "should calculate both table and index as database size" do
     EM.run do
-      @node.fetch_pool(@db["name"]).with_connection do |conn|
+      @node.fetch_pool(@db["service_id"]).with_connection do |conn|
         conn.query("use #{@db['name']}")
         # should calculate table size
         conn.query("CREATE TABLE test(id INT)")
@@ -141,11 +142,11 @@ describe "Mysql server node", components: [:nats], hook: :all do
       opts = @opts.dup
       # reduce storage quota to 256KB.
       extra_size = {}
-      @node.fetch_pool(@db["name"]).with_connection { |conn| extra_size = @node.dbs_size(conn) }
+      @node.fetch_pool(@db["service_id"]).with_connection { |conn| extra_size = @node.dbs_size(conn) }
       opts[:max_db_size] = 256.0/1024 + extra_size[@db["name"]].to_f / 1024 / 1024
       node = new_node(opts)
       EM.add_timer(1) do
-        binding = node.bind(@db["name"],  @default_opts)
+        binding = node.bind(@db["service_id"],  @default_opts)
         @test_dbs[@db] << binding
         conn = connect_to_mysql(binding)
         conn.query("create table test(data text)")
@@ -170,7 +171,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
           conn = connect_to_mysql(@db)
           expect{ conn.query("insert into test value('test')")}.to raise_error(Mysql2::Error)
           # new binding's write privilege should also be revoked.
-          new_binding = node.bind(@db['name'], @default_opts)
+          new_binding = node.bind(@db["service_id"], @default_opts)
           @test_dbs[@db] << new_binding
           new_conn = connect_to_mysql(new_binding)
           expect { new_conn.query("insert into test value('new_test')")}.to raise_error(Mysql2::Error)
@@ -219,11 +220,12 @@ describe "Mysql server node", components: [:nats], hook: :all do
       klass = @node.mysqlProvisionedService
       DataMapper.setup(:default, @opts[:local_db])
       DataMapper::auto_upgrade!
+      service_id = 'test-'+ UUIDTools::UUID.random_create.to_s
       name = 'test-'+ UUIDTools::UUID.random_create.to_s
       user = "test"
       password = "test"
       port = @node.new_port
-      service = klass.create(port, name, user, password, @default_version)
+      service = klass.create(port, service_id, name, user, password, @default_version)
       if not service.save
         raise "Failed to forge orphan instance: #{service.errors.inspect}"
       end
@@ -243,11 +245,11 @@ describe "Mysql server node", components: [:nats], hook: :all do
       tmp_db = new_instance
       @test_dbs[tmp_db] = []
       after_ins_list = @node.all_instances_list
-      before_ins_list << tmp_db["name"]
+      before_ins_list << tmp_db["service_id"]
       (before_ins_list.sort == after_ins_list.sort).should be_true
 
       before_bind_list = @node.all_bindings_list
-      tmp_credential = @node.bind(tmp_db["name"],  @default_opts)
+      tmp_credential = @node.bind(tmp_db["service_id"],  @default_opts)
       @test_dbs[tmp_db] << tmp_credential
       after_bind_list = @node.all_bindings_list
       before_bind_list << tmp_credential
@@ -262,7 +264,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
 
   it "should not create db or send response if receive a malformed request" do
     EM.run do
-      @node.fetch_pool(@db['name']).with_connection do |connection|
+      @node.fetch_pool(@db["service_id"]).with_connection do |connection|
         db_num = connection.query("show databases;").count
         mal_plan = "not-a-plan"
         db = nil
@@ -297,7 +299,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
       conn = connect_to_mysql(@db)
       expect {conn.query("SELECT 1")}.to_not raise_error
       msg = Yajl::Encoder.encode(@db)
-      @node.unprovision(@db["name"], [])
+      @node.unprovision(@db["service_id"], [])
       expect {connect_to_mysql(@db)}.to raise_error
       error = nil
       EM.stop
@@ -326,17 +328,17 @@ describe "Mysql server node", components: [:nats], hook: :all do
 
       db = @node.provision(@default_plan, nil, @default_version)
       @node.pools.size.should == (pool_size + 1)
-      @node.pools.should have_key(db["name"])
-      @node.mysqlProvisionedService.get(db["name"]).should_not == nil
+      @node.pools.should have_key(db["service_id"])
+      @node.mysqlProvisionedService.get(db["service_id"]).should_not == nil
       if @node.use_warden
         @node.free_ports.should_not include(db["port"])
         @node.free_ports.size.should == (free_port_size - 1)
       end
 
-      @node.unprovision(db["name"], [])
+      @node.unprovision(db["service_id"], [])
       @node.pools.size.should == pool_size
-      @node.pools.should_not have_key(db["name"])
-      @node.mysqlProvisionedService.get(db["name"]).should == nil
+      @node.pools.should_not have_key(db["service_id"])
+      @node.mysqlProvisionedService.get(db["service_id"]).should == nil
       if @node.use_warden
         @node.free_ports.size.should == free_port_size
         @node.free_ports.should include(db["port"])
@@ -366,7 +368,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
   end
 
   it "should kill long transaction" do
-    if @opts[:max_long_tx] > 0 and (@node.check_innodb_plugin @db['name'])
+    if @opts[:max_long_tx] > 0 and (@node.check_innodb_plugin @db["service_id"])
       EM.run do
         opts = @opts.dup
         # reduce max_long_tx to accelerate test
@@ -411,7 +413,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
   end
 
   it "should kill long queries" do
-    pending "Disable for non-Percona server since the test behavior varies on regular Mysql server." unless @node.is_percona_server?(@db['name'])
+    pending "Disable for non-Percona server since the test behavior varies on regular Mysql server." unless @node.is_percona_server?(@db["service_id"])
     EM.run do
       db = new_instance
       @test_dbs[db] = []
@@ -453,7 +455,8 @@ describe "Mysql server node", components: [:nats], hook: :all do
 
   it "should create a new credential when binding" do
     EM.run do
-      binding = @node.bind(@db["name"],  @default_opts)
+      binding = @node.bind(@db["service_id"],  @default_opts)
+      binding["service_id"].should == @db["service_id"]
       binding["name"].should == @db["name"]
       binding["host"].should be
       binding["host"].should == binding["hostname"]
@@ -472,14 +475,14 @@ describe "Mysql server node", components: [:nats], hook: :all do
     EM.run do
       binding_opts1 = { "privileges" => ["FULL"] }
       binding_opts2 = { "privileges" => ["READ_ONLY"] }
-      binding1 = @node.bind(@db["name"], binding_opts1)
+      binding1 = @node.bind(@db["service_id"], binding_opts1)
       connection1 = connect_to_mysql(binding1)
       expect do
         connection1.query("create table example (id INT, data VARCHAR(100))")
         connection1.query("insert into example (id,data) VALUES(2,'data2')")
         connection1.query("select * from example")
       end.to_not raise_error
-      binding2 = @node.bind(@db["name"], binding_opts2)
+      binding2 = @node.bind(@db["service_id"], binding_opts2)
       connection2 = connect_to_mysql(binding2)
       expect { connection2.query("insert into example (id,data) VALUES(3,'data3')") }.to raise_error(Mysql2::Error, /command denied/)
       expect { connection2.query("select * from example") }.to_not raise_error
@@ -490,19 +493,19 @@ describe "Mysql server node", components: [:nats], hook: :all do
   it "should forbid access for wrong binding options" do
     EM.run do
       binding_opts1 = ["FULL"]
-      expect { @node.bind(@db["name"], binding_opts1) }.to raise_error(RuntimeError, /Invalid binding options format/)
+      expect { @node.bind(@db["service_id"], binding_opts1) }.to raise_error(RuntimeError, /Invalid binding options format/)
       binding_opts2 = { "privileges" => "FULL" }
-      expect { @node.bind(@db["name"], binding_opts2) }.to raise_error(RuntimeError, /Invalid binding privileges type/)
+      expect { @node.bind(@db["service_id"], binding_opts2) }.to raise_error(RuntimeError, /Invalid binding privileges type/)
       binding_opts3 = { "privileges" => ["READ-ONLY"] }
-      expect { @node.bind(@db["name"], binding_opts3) }.to raise_error(RuntimeError, /Unknown binding privileges/)
+      expect { @node.bind(@db["service_id"], binding_opts3) }.to raise_error(RuntimeError, /Unknown binding privileges/)
       EM.stop
     end
   end
 
   it "should supply different credentials when binding evoked with the same input" do
     EM.run do
-      binding = @node.bind(@db["name"], @default_opts)
-      binding2 = @node.bind(@db["name"], @default_opts)
+      binding = @node.bind(@db["service_id"], @default_opts)
+      binding2 = @node.bind(@db["service_id"], @default_opts)
       @test_dbs[@db] << binding
       @test_dbs[@db] << binding2
       binding.should_not == binding2
@@ -512,7 +515,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
 
   it "should delete credential after unbinding" do
     EM.run do
-      binding = @node.bind(@db["name"], @default_opts)
+      binding = @node.bind(@db["service_id"], @default_opts)
       @test_dbs[@db] << binding
       conn = nil
       expect {conn = connect_to_mysql(binding)}.to_not raise_error
@@ -540,10 +543,10 @@ describe "Mysql server node", components: [:nats], hook: :all do
   it "should delete all bindings if service is unprovisioned" do
     EM.run do
       bindings = []
-      3.times { bindings << @node.bind(@db["name"], @default_opts)}
+      3.times { bindings << @node.bind(@db["service_id"], @default_opts)}
       @test_dbs[@db] = bindings
       conn = nil
-      @node.unprovision(@db["name"], bindings)
+      @node.unprovision(@db["service_id"], bindings)
       bindings.each { |binding| expect {connect_to_mysql(binding)}.to raise_error }
       EM.stop
     end
@@ -556,8 +559,8 @@ describe "Mysql server node", components: [:nats], hook: :all do
       conn = connect_to_mysql(db)
       conn.query("create table test(id INT)")
       conn.query("create procedure defaultfunc(out defaultcount int) begin select count(*) into defaultcount from test; end")
-      binding = @node.bind(db['name'], @default_opts)
-      new_binding = @node.bind(db['name'], @default_opts)
+      binding = @node.bind(db['service_id'], @default_opts)
+      new_binding = @node.bind(db['service_id'], @default_opts)
       @test_dbs[db] << binding
       @test_dbs[db] << new_binding
 
@@ -591,7 +594,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
       # backup current db
       host, port, user, password = %w(host port user pass).map{|key| @opts[:mysql][@default_version][key]}
       host, port = %w(host port).map{|key| db[key]} if @node.use_warden
-      tmp_file = "/tmp/#{db['name']}.sql.gz"
+      tmp_file = "/tmp/#{db['service_id']}.sql.gz"
       @tmpfiles << tmp_file
       mysqldump_bin = @opts[:mysql][@default_version]["mysqldump_bin"]
       result = `#{mysqldump_bin} -h #{host} -P #{port} --user='#{user}' --password='#{password}' -R #{db['name']} | gzip > #{tmp_file}`
@@ -608,7 +611,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
       bind_conn.close if bind_conn
       conn.close if conn
       @node.unbind(binding)
-      @node.restore(db["name"], "/tmp/").should == true
+      @node.restore(db["service_id"], "/tmp/").should == true
       conn = connect_to_mysql(db)
       res = conn.query("show tables")
       res.count().should == 1
@@ -637,7 +640,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
 
   it "should be able to disable an instance" do
     EM.run do
-      bind_cred = @node.bind(@db["name"],  @default_opts)
+      bind_cred = @node.bind(@db["service_id"],  @default_opts)
       conn = connect_to_mysql(bind_cred)
       @test_dbs[@db] << bind_cred
       @node.disable_instance(@db, [bind_cred])
@@ -655,12 +658,12 @@ describe "Mysql server node", components: [:nats], hook: :all do
       conn = connect_to_mysql(@db)
       conn.query('create table MyTestTable(id int)')
       @node.dump_instance(@db, nil, '/tmp').should == true
-      File.open(File.join("/tmp", "#{@db['name']}.sql")) do |f|
+      File.open(File.join("/tmp", "#{@db['service_id']}.sql")) do |f|
         line = f.each_line.find {|l| l =~ /MyTestTable/}
         line.should_not be nil
       end
-      @tmpfiles << File.join("/tmp", "#{@db['name']}.sql")
-      @tmpfiles << File.join("/tmp", "#{@db['name']}.service")
+      @tmpfiles << File.join("/tmp", "#{@db['service_id']}.sql")
+      @tmpfiles << File.join("/tmp", "#{@db['service_id']}.service")
       EM.stop
     end
   end
@@ -670,14 +673,14 @@ describe "Mysql server node", components: [:nats], hook: :all do
       db = new_instance
       @test_dbs[db] = []
       @node.dump_instance(db, nil , '/tmp')
-      @node.unprovision(db['name'], [])
+      @node.unprovision(db['service_id'], [])
       # give base code some time to remove the instance directories
       sleep 1 if @node.use_warden
       @node.import_instance(db, {}, '/tmp', @default_plan).should == true
       conn = connect_to_mysql(db)
       expect { conn.query('SELECT 1')}.to_not raise_error
-      @tmpfiles << File.join("/tmp", "#{db['name']}.sql")
-      @tmpfiles << File.join("/tmp", "#{db['name']}.service")
+      @tmpfiles << File.join("/tmp", "#{db['service_id']}.sql")
+      @tmpfiles << File.join("/tmp", "#{db['service_id']}.service")
       EM.stop
     end
   end
@@ -686,7 +689,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
     EM.run do
       db = new_instance
       @test_dbs[db] = []
-      binding = @node.bind(db['name'], @default_opts)
+      binding = @node.bind(db['service_id'], @default_opts)
       @test_dbs[db] << binding
       conn = connect_to_mysql(binding)
       @node.disable_instance(db, [binding])
@@ -707,7 +710,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
     EM.run do
       db = new_instance
       @test_dbs[db] = []
-      binding = @node.bind(db['name'], @default_opts)
+      binding = @node.bind(db['service_id'], @default_opts)
       @test_dbs[db] << binding
       conn = connect_to_mysql(binding)
       @node.disable_instance(db, [binding])
@@ -788,7 +791,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
     EM.run do
       v1 = @node.varz_details
       db = new_instance
-      binding = @node.bind(db["name"], @default_opts)
+      binding = @node.bind(db["service_id"], @default_opts)
       @test_dbs[db] = [binding]
       v2 = @node.varz_details
       (v2[:provision_served] - v1[:provision_served]).should == 1
@@ -800,7 +803,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
   it "should report instance disk size in varz" do
     EM.run do
       v = @node.varz_details
-      instance = v[:database_status].find {|d| d[:name] == @db["name"]}
+      instance = v[:database_status].find {|d| d[:service_id] == @db["service_id"]}
       instance.should_not be_nil
       instance[:size].should be >= 0
       EM.stop
@@ -811,14 +814,14 @@ describe "Mysql server node", components: [:nats], hook: :all do
     pending "This test is not capatiable with mysql2 conenction pool."
     EM.run do
       varz = @node.varz_details
-      varz[:instances].each do |name, status|
+      varz[:instances].each do |service_id, status|
         status.shoud  == "ok"
       end
       node = new_node(@opts)
       EM.add_timer(1) do
         node.pool.close
         varz = node.varz_details
-        varz[:instances].each do |name, status|
+        varz[:instances].each do |service_id, status|
           status.should == "ok"
         end
         EM.stop
@@ -829,23 +832,24 @@ describe "Mysql server node", components: [:nats], hook: :all do
   it "should report instance status in varz" do
     EM.run do
       varz = @node.varz_details()
-      instance = @db['name']
-      varz[:instances].each do |name, value|
-        if name == instance.to_sym
+      instance = @db["service_id"]
+      database = @db["name"]
+      varz[:instances].each do |service_id, value|
+        if service_id == instance.to_sym
           value.should == "ok"
         end
       end
       @node.fetch_pool(instance).with_connection do |connection|
-        connection.query("Drop database #{instance}")
+        connection.query("Drop database #{database}")
         sleep 1
         varz = @node.varz_details()
-        varz[:instances].each do |name, value|
-          if name == instance.to_sym
+        varz[:instances].each do |service_id, value|
+          if service_id == instance.to_sym
             value.should == "fail"
           end
         end
         # restore db so cleanup code doesn't complain.
-        connection.query("create database #{instance}")
+        connection.query("create database #{database}")
       end
       EM.stop
     end
@@ -855,7 +859,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
     EM.run do
       varz = @node.varz_details
       if @node.use_warden
-        varz[:pools].should have_key(@db["name"])
+        varz[:pools].should have_key(@db["service_id"])
       else
         @opts[:mysql].keys.each { |key| varz[:pools].should have_key(key) }
       end
@@ -868,13 +872,13 @@ describe "Mysql server node", components: [:nats], hook: :all do
       provision_served = @node.provision_served
       binding_served = @node.binding_served
       # Set concurrent threads to pool size. Prevent pool is empty error.
-      NUM = @node.fetch_pool(@db['name']).size
+      NUM = @node.fetch_pool(@db['service_id']).size
       threads = []
       NUM.times do
         threads << Thread.new do
           db = new_instance
-          binding = @node.bind(db["name"], @default_opts)
-          @node.unprovision(db["name"], [binding])
+          binding = @node.bind(db["service_id"], @default_opts)
+          @node.unprovision(db["service_id"], [binding])
         end
       end
       threads.each {|t| t.join}
@@ -891,7 +895,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
       node = new_node(opts)
       EM.add_timer(1) do
         db = node.provision(@default_plan, nil, @default_version)
-        binding = node.bind(db["name"],  @default_opts)
+        binding = node.bind(db["service_id"],  @default_opts)
         @test_dbs[db] = [binding]
         expect { conn = connect_to_mysql(db) }.to_not raise_error
         expect { conn = connect_to_mysql(binding) }.to_not raise_error
@@ -911,13 +915,13 @@ describe "Mysql server node", components: [:nats], hook: :all do
       EM.add_timer(2) do
         begin
           # server side timeout
-          node.fetch_pool(@db['name']).with_connection do |conn|
+          node.fetch_pool(@db['service_id']).with_connection do |conn|
             # simulate connection idle
             sleep(timeout * 5)
             expect{ conn.query("select 1") }.to raise_error(Mysql2::Error, /MySQL server has gone away/)
           end
           # client side timeout
-          node.fetch_pool(@db['name']).with_connection do |conn|
+          node.fetch_pool(@db['service_id']).with_connection do |conn|
             # override server side timeout
             conn.query("set @@wait_timeout=10")
             expect{ conn.query("select sleep(5)") }.to raise_error(Mysql2::Error, /Timeout/)
@@ -941,12 +945,12 @@ describe "Mysql server node", components: [:nats], hook: :all do
       EM.add_timer(2) do
         begin
           # server side timeout
-          node.fetch_pool(@db['name']).with_connection do |conn|
+          node.fetch_pool(@db['service_id']).with_connection do |conn|
             sleep(5)
             expect{ conn.query("select 1") }.to_not raise_error
           end
           # client side timeout
-          node.fetch_pool(@db['name']).with_connection do |conn|
+          node.fetch_pool(@db['service_id']).with_connection do |conn|
             expect{ conn.query("select sleep(5)") }.to_not raise_error
           end
         ensure
@@ -962,6 +966,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
     EM.run do
       node = new_node(@opts)
       creds = {
+        "service_id" => "testid",
         "name" => "testdbname",
         "user" => "testuser",
         "password" => "testpass",
@@ -982,6 +987,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
     EM.run do
       node = new_node(@opts)
       creds = {
+        "service_id" => "testid",
         "name" => "testdbname",
         "user" => "testuser",
         "password" => "testpass",
@@ -1006,6 +1012,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
     EM.run do
       node = new_node(@opts)
       creds = {
+        "service_id" => "testid",
         "name" => "testdbname",
         "user" => "testuser",
         "password" => "testpass",
@@ -1026,9 +1033,9 @@ describe "Mysql server node", components: [:nats], hook: :all do
       @node.create_missing_pools if @node.use_warden
       @test_dbs.keys.each do |db|
         begin
-          name = db["name"]
-          @node.unprovision(name, @test_dbs[db])
-          @node.logger.info("Clean up temp database: #{name}")
+          service_id = db["service_id"]
+          @node.unprovision(service_id, @test_dbs[db])
+          @node.logger.info("Clean up temp database: #{service_id}")
         rescue => e
           @node.logger.info("Error during cleanup #{e}")
         end

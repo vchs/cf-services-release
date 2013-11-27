@@ -35,7 +35,8 @@ describe VCAP::Services::Mysql::Provisioner do
         active_peer["credentials"]["node_id"].should == "node1"
 
         config["backup_peer"].should == "node1"
-        credentials["name"].should == @service_id
+        credentials["service_id"].should eq @service_id
+        credentials["name"].should_not == @service_id
         credentials["node_id"].should == "node1"
         credentials["port"].should == VCAP::Services::Mysql::Provisioner::DEFAULT_PORTS_RANGE.first
       end

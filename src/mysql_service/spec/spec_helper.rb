@@ -60,7 +60,7 @@ module VCAP::Services::Mysql::WithWarden
 
   def create_missing_pools
     mysqlProvisionedService.all.each do |instance|
-      unless @pools.keys.include?(instance.name)
+      unless @pools.keys.include?(instance.service_id)
         new_port(instance.port)
         setup_pool(instance)
       end

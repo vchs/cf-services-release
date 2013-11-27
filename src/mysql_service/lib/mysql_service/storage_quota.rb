@@ -45,6 +45,8 @@ class VCAP::Services::Mysql::Node
     result.each do |db, _|
       result[db] += extra_size
     end
+    # TODO we need to add service_id into result so that we can
+    # distinguish two dbs with the same name in two instances
     result
   end
 
@@ -60,10 +62,10 @@ class VCAP::Services::Mysql::Node
     end
   end
 
-  def access_disabled?(db)
-    fetch_pool(db).with_connection do |connection|
+  def access_disabled?(service)
+    fetch_pool(service.service_id).with_connection do |connection|
       rights = connection.query("SELECT insert_priv, create_priv, update_priv
-                                  FROM db WHERE Db=" +  "'#{db}'")
+                                  FROM db WHERE Db=" +  "'#{service.name}'")
       rights.each do |right|
         return false if right.values.include? 'Y'
       end
@@ -72,8 +74,8 @@ class VCAP::Services::Mysql::Node
   end
 
   def grant_write_access(db, service)
-    @logger.warn("DB permissions inconsistent....") unless access_disabled?(db)
-    fetch_pool(service.name).with_connection do |connection|
+    @logger.warn("DB permissions inconsistent....") unless access_disabled?(service)
+    fetch_pool(service.service_id).with_connection do |connection|
       connection.query("UPDATE db SET insert_priv='Y', create_priv='Y',
                          update_priv='Y' WHERE Db=" +  "'#{db}'")
       connection.query("FLUSH PRIVILEGES")
@@ -85,8 +87,8 @@ class VCAP::Services::Mysql::Node
   end
 
   def revoke_write_access(db, service)
-    @logger.warn("DB permissions inconsistent....") if access_disabled?(db)
-    fetch_pool(service.name).with_connection do |connection|
+    @logger.warn("DB permissions inconsistent....") if access_disabled?(service)
+    fetch_pool(service.service_id).with_connection do |connection|
       connection.query("UPDATE db SET insert_priv='N', create_priv='N',
                          update_priv='N' WHERE Db=" +  "'#{db}'")
       connection.query("FLUSH PRIVILEGES")
@@ -111,6 +113,7 @@ class VCAP::Services::Mysql::Node
     mysqlProvisionedService.all.each do |service|
       begin
         db, user, quota_exceeded = service.name, service.user, service.quota_exceeded
+        # TODO use service_id & db to get the size
         size = sizes[db]
         # ignore the orphan instance
         next if size.nil?
@@ -125,7 +128,7 @@ class VCAP::Services::Mysql::Node
                        " -- access restored")
         end
       rescue => e1
-        @logger.warn("Fail to enfroce storage quota on #{service.name}: #{e1}" + e1.backtrace.join("|") )
+        @logger.warn("Fail to enfroce storage quota on #{service.service_id}: #{e1}" + e1.backtrace.join("|") )
       end
     end
   rescue Mysql2::Error => e
@@ -140,7 +143,7 @@ class VCAP::Services::Mysql::Node
     begin
       db, user, quota_exceeded = service.name, service.user, service.quota_exceeded
       sizes = {}
-      fetch_pool(service.name).with_connection do |connection|
+      fetch_pool(service.service_id).with_connection do |connection|
         connection.query('use mysql')
         sizes.merge!(dbs_size(connection, [db]))
       end
@@ -156,7 +159,7 @@ class VCAP::Services::Mysql::Node
                      " -- access restored")
       end
     rescue => e
-      @logger.warn("Fail to enforce the storage quota on #{service.name}: #{e}" + e.backtrace.join("|") )
+      @logger.warn("Fail to enforce the storage quota on #{service.serivce_id}: #{e}" + e.backtrace.join("|") )
     end
   end
 
