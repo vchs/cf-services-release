@@ -25,26 +25,6 @@ class VCAP::Services::Mysql::Provisioner < VCAP::Services::Base::Provisioner
     @custom_resource_manager = opts[:custom_resource_manager]
   end
 
-  def create_snapshot_job
-    VCAP::Services::Mysql::Snapshot::CreateSnapshotJob
-  end
-
-  def rollback_snapshot_job
-    VCAP::Services::Mysql::Snapshot::RollbackSnapshotJob
-  end
-
-  def delete_snapshot_job
-    VCAP::Services::Base::AsyncJob::Snapshot::BaseDeleteSnapshotJob
-  end
-
-  def create_serialized_url_job
-    VCAP::Services::Base::AsyncJob::Serialization::BaseCreateSerializedURLJob
-  end
-
-  def import_from_url_job
-    VCAP::Services::Mysql::Serialization::ImportFromURLJob
-  end
-
   def create_backup_job
     VCAP::Services::Mysql::Backup::CreateBackupJob
   end
