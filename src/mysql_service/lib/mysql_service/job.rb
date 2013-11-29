@@ -12,6 +12,4 @@ module VCAP
   end
 end
 
-require "job/mysql_serialization"
-require "job/mysql_snapshot"
 require "job/mysql_backup"

@@ -42,6 +42,7 @@ module VCAP::Services::Mysql::Backup
     after :all do
       EM.run do
         @node.unprovision(@db["service_id"], [])
+        @client.close if @client
         EM.stop
       end if @use_warden
       stop_redis
@@ -76,14 +77,14 @@ module VCAP::Services::Mysql::Backup
       service_name = "MyaaS"
       backup_id = UUIDTools::UUID.random_create.to_s
       EM.run do
-        client = NATS.connect(:uri => @config["mbus"])
-        client.subscribe("#{service_name}.create_backup") do |msg, reply|
+        @client = NATS.connect(:uri => @config["mbus"])
+        @client.subscribe("#{service_name}.create_backup") do |msg, reply|
           res = VCAP::Services::Internal::BackupJobResponse.decode(msg)
           res.success.should eq true
           res.properties.should include("size", "date", "status")
           sr = VCAP::Services::Internal::SimpleResponse.new
           sr.success = true
-          client.publish(reply, sr.encode)
+          @client.publish(reply, sr.encode)
         end
 
         job_id = CreateBackupJob.create(:service_id => service_id,

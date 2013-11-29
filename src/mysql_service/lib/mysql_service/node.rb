@@ -396,13 +396,7 @@ class VCAP::Services::Mysql::Node
   def unbind(credential)
     return if credential.nil?
     @logger.debug("Unbind service: #{credential.inspect}")
-    service_id, name, user, bind_opts, passwd = %w(service_id name user bind_opts password).map { |k| credential[k] }
-
-    # Special case for 'ancient' instances that don't have new credentials for each Bind operation.
-    # Never delete a user that was created as part of the initial provisioning process.
-    @logger.debug("Begin check ancient credentials.")
-    mysqlProvisionedService.all(:service_id => service_id, :user => user).each { |record| @logger.info("Find unbind credential in local database: #{record.inspect}. Skip delete account."); return true }
-    @logger.debug("Ancient credential not found.")
+    service_id, name, user = %w(service_id name user).map { |k| credential[k] }
 
     # validate the existence of credential, in case we delete a normal account because of a malformed credential
     conn_pool = fetch_pool(service_id)
@@ -494,7 +488,7 @@ class VCAP::Services::Mysql::Node
       fetch_pool(service_id).with_connection do |connection|
         process_list = connection.query("show processlist")
         process_list.each do |proc|
-          thread_id, user_, db, command, time, info = proc["Id"], proc["User"], proc["db"], proc["Command"], proc["Time"], proc["Info"]
+          thread_id, user_, db = proc["Id"], proc["User"], proc["db"]
           if user_ == user then
             connection.query("KILL #{thread_id}")
             @logger.info("Kill session: user:#{user} db:#{db}")
@@ -507,116 +501,6 @@ class VCAP::Services::Mysql::Node
     end
   end
 
-  # restore a given instance using backup file.
-  def restore(service_id, backup_path)
-    @logger.debug("Restore instance #{service_id} using backup at #{backup_path}")
-    service = mysqlProvisionedService.get(service_id)
-    name = service.name
-    raise MysqlError.new(MysqlError::MYSQL_CONFIG_NOT_FOUND, service_id) unless service
-
-    fetch_pool(service_id).with_connection do |connection|
-      # revoke write and lock privileges to prevent race with drop database.
-      connection.query("UPDATE db SET insert_priv='N', create_priv='N',
-                         update_priv='N', lock_tables_priv='N' WHERE Db='#{name}'")
-      connection.query("FLUSH PRIVILEGES")
-      kill_database_session(connection, name)
-      # mysql can't delete tables that not in dump file.
-      # recreate the database to prevent leave unclean tables after restore.
-      connection.query("DROP DATABASE #{name}")
-      connection.query("CREATE DATABASE #{name}")
-      # restore privileges.
-      connection.query("UPDATE db SET insert_priv='Y', create_priv='Y',
-                         update_priv='Y', lock_tables_priv='Y' WHERE Db='#{name}'")
-      connection.query("FLUSH PRIVILEGES")
-    end
-    host, user, pass, port, socket, mysql_bin = instance_configs(service)
-    path = File.join(backup_path, "#{service_id}.sql.gz")
-    cmd = "#{@gzip_bin} -dc #{path}|" +
-      "#{mysql_bin} -h #{host} --port='#{port}' --user='#{user}' --password='#{pass}'"
-    cmd += " -S #{socket}" unless socket.nil?
-    cmd += " #{name}"
-    o, e, s = exe_cmd(cmd)
-    if s.exitstatus == 0
-      # delete the procedures and functions: security_type is definer while the definer doesn't exist
-      fetch_pool(service_id).with_connection do |connection|
-        handle_discarded_routines(name, connection)
-      end
-      return true
-    else
-      return nil
-    end
-  rescue => e
-    @logger.error("Error during restore #{e}")
-    nil
-  end
-
-  # Disable all credentials and kill user sessions
-  def disable_instance(prov_cred, binding_creds)
-    @logger.debug("Disable instance #{prov_cred["service_id"]} request.")
-    binding_creds << prov_cred
-    binding_creds.each do |cred|
-      unbind(cred)
-    end
-    true
-  rescue => e
-    @logger.warn(e)
-    nil
-  end
-
-  # Dump db content into given path
-  def dump_instance(prov_cred, binding_creds, dump_file_path)
-    @logger.debug("Dump instance #{prov_cred["service_id"]} request.")
-    service_id = prov_cred["service_id"]
-    service = mysqlProvisionedService.get(service_id)
-    name = service.name
-    File.open(File.join(dump_file_path, "#{service_id}.service"), 'w') { |f| Marshal.dump(service, f) }
-    host, user, password, port, socket, _, mysqldump_bin = instance_configs(service)
-    dump_file = File.join(dump_file_path, "#{service_id}.sql")
-    @logger.info("Dump instance #{service_id} content to #{dump_file}")
-    cmd = "#{mysqldump_bin} -h #{host} --port='#{port}' --user='#{user}' --password='#{password}' -R --single-transaction #{'-S '+socket if socket} #{name} > #{dump_file}"
-    o, e, s = exe_cmd(cmd)
-    if s.exitstatus == 0
-      return true
-    else
-      return nil
-    end
-  rescue => e
-    @logger.warn(e)
-    nil
-  end
-
-  # Provision and import dump files
-  # Refer to #dump_instance
-  def import_instance(prov_cred, binding_creds_hash, dump_file_path, plan)
-    @logger.debug("Import instance #{prov_cred["service_id"]} request.")
-    @logger.info("Provision an instance with plan: #{plan} using data from #{prov_cred.inspect}")
-
-    service_id = prov_cred["service_id"]
-    dump_service = File.join(dump_file_path, "#{service_id}.service")
-    service = File.open(dump_service, 'r') { |f| Marshal.load(f) }
-    raise "Cannot parse dumpfile in #{dump_service}" if service.nil?
-    provision(plan, prov_cred, service.version)
-    provisioned_service = mysqlProvisionedService.get(service_id)
-    name = provisioned_service.name
-    import_file = File.join(dump_file_path, "#{service_id}.sql")
-    host, user, password, port, socket, mysql_bin = instance_configs(provisioned_service)
-    @logger.info("Import data from #{import_file} to database #{name} of instance #{service_id}")
-    cmd = "#{mysql_bin} --host=#{host} --port='#{port}' --user='#{user}' --password='#{password}' #{'-S '+socket if socket} #{name} < #{import_file}"
-    o, e, s = exe_cmd(cmd)
-    if s.exitstatus == 0
-      # delete the procedures and functions: security_type is definer while the definer doesn't exist
-      fetch_pool(service_id).with_connection do |connection|
-        handle_discarded_routines(name, connection)
-      end
-      return true
-    else
-      return nil
-    end
-  rescue => e
-    @logger.warn(e)
-    nil
-  end
-
   def instance_configs instance
     return unless instance
     config = @mysql_configs[instance.version]
@@ -624,49 +508,6 @@ class VCAP::Services::Mysql::Node
     result[0] = instance.ip if @use_warden
 
     result
-  end
-
-  # Re-bind credentials
-  # Refer to #disable_instance
-  def enable_instance(prov_cred, binding_creds_hash)
-    @logger.debug("Enable instance #{prov_cred["service_id"]} request.")
-    prov_cred = bind(prov_cred["service_id"], {"privileges"=>["FULL"]}, prov_cred)
-    binding_creds_hash.each_value do |v|
-      cred = v["credentials"]
-      binding_opts = v["binding_options"]
-      bind(cred["service_id"], binding_opts, cred)
-    end
-    true
-  rescue => e
-    @logger.warn(e)
-    nil
-  end
-
-  def update_instance(prov_cred, binding_creds_hash)
-    @logger.debug("Update instance #{prov_cred["name"]} handles request.")
-    service_id = prov_cred["service_id"]
-    prov_cred = bind(service_id, {"privileges"=>["FULL"]}, prov_cred)
-    binding_creds_hash.each_value do |v|
-      cred = v["credentials"]
-      binding_opts = v["binding_options"]
-      v["credentials"] = bind(service_id, binding_opts, cred)
-    end
-    [prov_cred, binding_creds_hash]
-  rescue => e
-    @logger.warn(e)
-    []
-  end
-
-  # shell CMD wrapper and logger
-  def exe_cmd(cmd, stdin=nil)
-    @logger.debug("Execute shell cmd:[#{cmd}]")
-    o, e, s = Open3.capture3(cmd, :stdin_data => stdin)
-    if s.exitstatus == 0
-      @logger.info("Execute cmd:[#{cmd}] succeeded.")
-    else
-      @logger.error("Execute cmd:[#{cmd}] failed. Stdin:[#{stdin}], stdout: [#{o}], stderr:[#{e}]")
-    end
-    return [o, e, s]
   end
 
   def varz_details
