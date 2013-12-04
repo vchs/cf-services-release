@@ -36,7 +36,7 @@ describe VCAP::Services::MSSQL::Provisioner do
         peers.should be_instance_of Array
 
         credentials.should be peers[0]["credentials"]
-        credentials["name"].should eq service_id
+        credentials["service_id"].should eq service_id
         credentials["node_id"].should eq node_id
         credentials["port"].should eq 9999
       end

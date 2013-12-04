@@ -1,16 +1,16 @@
 #!/usr/bin/env ruby
 # -*- mode: ruby -*-
 #
-# Copyright (c) 2009-2011 VMware, Inc.
+# Copyright (c) 2013-2015 VMware, Inc.
 
 ENV["BUNDLE_GEMFILE"] ||= File.expand_path('../../Gemfile', __FILE__)
 require 'bundler/setup'
 require 'vcap_services_base'
 
-require_relative "../lib/mssql_service/provisioner"
+require_relative '../lib/mssql_service/provisioner'
+require_relative '../lib/mssql_service/resource_manager'
 
 class VCAP::Services::MSSQL::Gateway < VCAP::Services::Base::Gateway
-
   def provisioner_class
     VCAP::Services::MSSQL::Provisioner
   end
@@ -20,12 +20,15 @@ class VCAP::Services::MSSQL::Gateway < VCAP::Services::Base::Gateway
     File.join(config_base_dir, 'mssql_gateway.yml')
   end
 
-  # TODO: We donot take async channel into consideration during POC.
-  #def additional_options
-  #  {
-  #    :resque => @config[:resque]
-  #  }
-  #end
+  def additional_options
+    {
+      :redis => @config[:redis]
+    }
+  end
+
+  def custom_resource_manager_class
+    VCAP::Services::MSSQL::ResourceManager
+  end
 end
 
 VCAP::Services::MSSQL::Gateway.new.start

@@ -29,8 +29,7 @@ GIT
 
 GIT
   remote: https://github.com/vchs/vcap-services-base.git
-  revision: ba25fac0ec658bae3c7f752133872fbb35fdb2e0
-  ref: ba25fac0ec
+  revision: 68a3bc49cc04ca5ad7aa296a26a4933aba041101
   specs:
     vcap_services_base (0.1.17)
       cf-uaa-lib
@@ -287,6 +286,7 @@ DEPENDENCIES
   json (~> 1.6)
   nats (~> 0.4.26)
   rake (= 10.1.0)
+  redis (= 3.0.6)
   rspec (= 2.14.1)
   ruby-hmac (~> 0.4.0)
   sequel (= 3.45.0)

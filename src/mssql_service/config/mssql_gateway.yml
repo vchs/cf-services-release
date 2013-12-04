@@ -48,3 +48,4 @@ plan_management:
     expensive:
       low_water: 1
       high_water: 20
+redis: redis://127.0.0.1:6379/0/mssql
