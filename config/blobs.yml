@@ -155,7 +155,7 @@ mysql_ci/mysql-5.6.13-config-all-in-one.tgz:
     ZjY5MWIxNGUwODg5NjgxMGUxZjIwY2I0ZmMzOGE4MWM5OWIzODYzYg==
   size: 2708
 mysql_ci/warden_rootfs.tgz:
-  object_id: 56e1f26d-17ea-4b49-8aad-a400d3c9c201
+  object_id: 491435dd-2ad3-45b7-9439-d2ff7787893d
   sha: !binary |-
-    YjI2MzNiMmFiNDk2NGY5MTQwMmJiMmQ4ODlmMmYxMjQ0OWE4YjgyOA==
-  size: 199489185
+    ZWJkZWFkYjAxYzkxMTM4NzNmMGFkOWVhZDZjYTNiZmQ5ZDMyNTdmMg==
+  size: 132743704
