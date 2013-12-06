@@ -18,7 +18,7 @@ module VCAP::Services::MSSQL
       begin
         encoded_object = encode(object)
       rescue => e
-        log "Invalid UTF-8 character in job: #{e.message}"
+        log "Invalid UTF-8 character in task: #{e.message}"
         return
       end
 

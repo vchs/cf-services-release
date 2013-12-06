@@ -20,16 +20,16 @@ class VCAP::Services::MSSQL::ResourceManager < VCAP::Services::CustomResourceMan
       @provisioner.create_backup(service_id, backup_id, opts) do |msg|
         if msg["success"]
           resp.result = 0
-          resp.code   = "Backup job successfully triggerred"
+          resp.code   = "Backup task successfully triggerred"
         else
           resp.result = 1
-          resp.code   = "Creating backup job failed"
+          resp.code   = "Creating backup task failed"
         end
         blk.call(resp.encode)
       end
     rescue => e
       resp.result = 1
-      resp.code   = "Creating backup job failed"
+      resp.code   = "Creating backup task failed"
       @logger.warn("Exception at VCAP::Services::MSSQL::ResourceManager.create_backup: #{e}")
       @logger.warn(e)
       blk.call(resp.encode)
