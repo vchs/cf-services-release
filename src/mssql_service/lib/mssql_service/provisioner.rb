@@ -3,9 +3,10 @@
 require_relative './common'
 require_relative './util'
 require_relative './message_queue'
-require_relative './job'
+require_relative './task'
 
 class VCAP::Services::MSSQL::Provisioner < VCAP::Services::Base::Provisioner
+  include VCAP::Services::MSSQL::Messages
   include VCAP::Services::MSSQL::Common
   include VCAP::Services::MSSQL::Util
 
@@ -25,71 +26,69 @@ class VCAP::Services::MSSQL::Provisioner < VCAP::Services::Base::Provisioner
     if addition_opts && addition_opts[:redis]
       MessageQueue.redis = addition_opts[:redis]
     end
-    %w[create_backup].each do |op|
+    %w[backup].each do |op|
       eval %[@node_nats.subscribe("#{service_name}.#{op}") { |msg, reply| on_#{op}(msg, reply) }]
     end
   end
 
   # Called by MSSQL ResourceManager which handle the http request coms from SC
   def create_backup(service_id, backup_id, opts = {}, &blk)
-    @logger.debug("Create backup job for service_id=#{service_id}")
+    @logger.debug("Create backup task for service_id=#{service_id}")
 
     @logger.debug(opts)
+
+    opts["backup_id"] = backup_id
 
     options = {
                 :id         => generate_credential,
                 :name       => "backup",
+                :node_id    => find_backup_peer(service_id), # used to identify queue "#{queue_name}:q:#{node_id}"
                 :service_id => service_id,
-                :backup_id  => backup_id,
-                :node_id    => find_backup_peer(service_id),
-                :metadata   => backup_metadata(service_id).merge(opts)
+                :properties => opts
               }
 
-    BackupJob.create(options)
+    BackupTask.create(options)
 
-    @logger.info("CreateBackupJob created: #{options}")
+    @logger.info("BackupJob created: #{options}")
     blk.call(success)
   rescue => e
-    @logger.warn("CreateBackupJob failed: #{e}")
+    @logger.warn("BackupJob failed: #{e}")
     @logger.warn(e)
     blk.call(failure(e))
   end
 
-  # Receive backup response from Node throug NATS: MSSQL.create_backup
-  def on_create_backup(msg, reply)
-    @logger.debug("Receive backup job response: #{msg}")
-    backup_job_resp = BackupJobResponse.decode(msg)
-    resp_to_worker = SimpleResponse.new
+  def user_triggered_options(args)
+    args.merge({ :type => args["type"] || "full", :trigger_by => "user" })
+  end
 
-    if backup_job_resp.success
-      @logger.info("Backup job #{backup_job_resp.properties} succeeded")
+  def periodically_triggered_options(args)
+  end
+
+  # Receive backup response from Node throug NATS: MSSQL.backup
+  def on_backup(msg, reply)
+    @logger.debug("Receive backup task response: #{msg}")
+    rep = BackupTaskResponse.decode(msg)
+    simple_rep = SimpleResponse.new
+
+    if rep.result.eql? "ok"
+      @logger.info("Backup task #{rep.properties} succeeded")
     else
-      @logger.warn("Backup job #{backup_job_resp.properties} failed due to #{resp_to_controller.error}")
+      @logger.warn("Backup task #{rep.properties} failed due to #{rep.result}")
     end
 
-    properties = backup_job_resp.properties
+    properties = rep.properties
     f = Fiber.new do
       @custom_resource_manager.update_resource_properties(properties["update_url"], properties)
     end
     f.resume
-    resp_to_worker.success = true
+    simple_rep.success = true
   rescue => e
-    @logger.warn("Exception at on_create_backup: #{e}")
+    @logger.warn("Exception at on_backup: #{e}")
     @logger.warn(e)
-    resp_to_worker.success = false
-    resp_to_worker.error = e.to_s
+    simple_rep.success = false
+    simple_rep.error = e.to_s
   ensure
-    @node_nats.publish(reply, resp_to_worker.encode)
-  end
-
-  def user_triggered_options(args)
-    type = args["type"] || "full"
-    {:type => type, :trigger_by => "user", :properties => args}
-  end
-
-  def periodically_triggered_options(args)
-    type = args["type"] || "differentiate"
-    args.merge({:type => type, :trigger_by => "auto", :properties => args})
+    @node_nats.publish(reply, simple_rep.encode)
   end
 
   def generate_recipes(service_id, plan_config, version, best_nodes)
@@ -236,4 +235,4 @@ end
 
 # Alias
 MessageQueue = VCAP::Services::MSSQL::MessageQueue
-BackupJob = VCAP::Services::MSSQL::BackupJob
+BackupTask = VCAP::Services::MSSQL::BackupTask
