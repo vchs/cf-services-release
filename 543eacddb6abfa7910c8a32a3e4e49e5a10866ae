@@ -1,0 +1,8 @@
+Verified+1: CI Master <cf-ci@rbcon.com>
+Code-Review+2: Yuan Zhuang <yuanzhuang@vmware.com>
+Verified+1: Yuan Zhuang <yuanzhuang@vmware.com>
+Submitted-by: Khalil Zhang <khalilz@vmware.com>
+Submitted-at: Fri, 06 Dec 2013 08:16:04 +0000
+Reviewed-on: http://tempest-reviews.eng.vmware.com/1701
+Project: cf-services-release
+Branch: refs/heads/master
