@@ -37,13 +37,12 @@ class VCAP::Services::MSSQL::Provisioner < VCAP::Services::Base::Provisioner
 
     @logger.debug(opts)
 
-    opts["backup_id"] = backup_id
-
     options = {
                 :id         => generate_credential,
                 :name       => "backup",
                 :node_id    => find_backup_peer(service_id), # used to identify queue "#{queue_name}:q:#{node_id}"
                 :service_id => service_id,
+                :backup_id  => backup_id,
                 :properties => opts
               }
 
@@ -70,7 +69,7 @@ class VCAP::Services::MSSQL::Provisioner < VCAP::Services::Base::Provisioner
     rep = BackupTaskResponse.decode(msg)
     simple_rep = SimpleResponse.new
 
-    if rep.result.eql? "ok"
+    if rep.result.upcase.eql? "OK"
       @logger.info("Backup task #{rep.properties} succeeded")
     else
       @logger.warn("Backup task #{rep.properties} failed due to #{rep.result}")
