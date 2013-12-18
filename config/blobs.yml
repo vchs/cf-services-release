@@ -159,3 +159,18 @@ mysql_ci/warden_rootfs.tgz:
   sha: !binary |-
     ZWJkZWFkYjAxYzkxMTM4NzNmMGFkOWVhZDZjYTNiZmQ5ZDMyNTdmMg==
   size: 132743704
+mysql/client-5.6.15-linux-glibc2.5-x86_64.tar.gz:
+  object_id: 76c96cd3-9410-4eb0-802e-a358218a8a7c
+  sha: !binary |-
+    NTdiNTQ5OTdlNGJjOWY3NTIyYWI1NDQ1YWU3YjUwODk3NzNiMzMyZA==
+  size: 5230025
+mysql/mysql-initdb-5.6.15-linux-glibc2.5-x86_64.tar.gz:
+  object_id: 60a91b46-bfd7-423f-b232-3849ba690c25
+  sha: !binary |-
+    YzgzZDVmOGI0OTYwOGQzZWRmNDI1NDM5NjE2ZTdkZTIwOWE5YjdiYQ==
+  size: 271569
+mysql/server-5.6.15-linux-glibc2.5-x86_64.tar.gz:
+  object_id: baeb933f-c865-4609-9879-6446a3a6a864
+  sha: !binary |-
+    ODMwYjRlZTJhOWQwOTE1YzAzNzc2NTMxMWM4MDA1ZjU5NzgzZGUwZQ==
+  size: 76885860
