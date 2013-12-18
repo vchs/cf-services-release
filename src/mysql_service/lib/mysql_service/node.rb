@@ -293,7 +293,7 @@ class VCAP::Services::Mysql::Node
     @kill_long_transaction_lock.unlock if acquired
   end
 
-  def provision(plan, credential=nil, version=nil)
+  def provision(plan, credential=nil, version=nil, properties={})
     raise MysqlError.new(MysqlError::MYSQL_INVALID_PLAN, plan) unless plan == @plan
     raise ServiceError.new(ServiceError::UNSUPPORTED_VERSION, version) unless @supported_versions.include?(version)
 
@@ -303,18 +303,20 @@ class VCAP::Services::Mysql::Node
       if credential
         # name: the database name
         service_id, name, user, password = %w(service_id name user password).map { |key| credential[key] }
-        provisioned_service = mysqlProvisionedService.create(new_port(credential["port"]), service_id, name, user, password, version)
+        provisioned_service = mysqlProvisionedService.create(new_port(credential["port"]), service_id, name, user, password, version, properties)
       else
         # mysql database name should start with alphabet character
         service_id = generate_service_id
         name = 'd' + generate_credential(password_length)
         user = 'u' + generate_credential(password_length)
         password = 'p' + generate_credential(password_length)
-        provisioned_service = mysqlProvisionedService.create(new_port, service_id, name, user, password, version)
+        provisioned_service = mysqlProvisionedService.create(new_port, service_id, name, user, password, version, properties)
       end
+
+      is_restoring = properties && properties["is_restoring"]
       provisioned_service.run do |instance|
         setup_pool(instance)
-        raise "Could not create database" unless create_database(instance)
+        raise "Could not create database" unless is_restoring || create_database(instance)
       end
       response = gen_credential(provisioned_service.service_id, provisioned_service.name, provisioned_service.user, provisioned_service.password, get_port(provisioned_service))
       @statistics_lock.synchronize do
@@ -716,7 +718,8 @@ class VCAP::Services::Mysql::Node::ProvisionedService
   property :version, String
 
   class << self
-    def create(port, service_id, name, user, password, version)
+    # non-wardenized mysql does not support "properties"
+    def create(port, service_id, name, user, password, version, properties={})
       provisioned_service = new
       provisioned_service.service_id = service_id
       provisioned_service.name = name
@@ -759,7 +762,7 @@ class VCAP::Services::Mysql::Node::WardenProvisionedService
   private_class_method :new
 
   class << self
-    def create(port, service_id, name, user, password, version)
+    def create(port, service_id, name, user, password, version, properties={})
       raise "Parameter missing" unless port
       provisioned_service = new
       provisioned_service.service_id = service_id
@@ -770,7 +773,9 @@ class VCAP::Services::Mysql::Node::WardenProvisionedService
       provisioned_service.plan = 1
       provisioned_service.version = version
 
-      provisioned_service.prepare_filesystem(@max_disk)
+      opts = {}
+      opts[:remove_base_dir] = false if properties && properties["is_restoring"]
+      provisioned_service.prepare_filesystem(@max_disk, opts)
       FileUtils.mkdir_p(provisioned_service.tmp_dir)
       provisioned_service
     end

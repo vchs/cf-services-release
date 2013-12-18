@@ -840,6 +840,41 @@ describe "Mysql server node", components: [:nats], hook: :all do
     end
   end
 
+  it "should support provision with restored data in warden" do
+    pending "This case is for warden only" unless @node.use_warden
+    EM.run do
+      creds = {
+        "service_id" => "new_instance",
+        "name"       => @db["name"],
+        "user"       => @db["user"],
+        "password"   => @db["password"],
+        "port"       => 25555,
+      }
+
+      conn = connect_to_mysql(@db)
+      conn.query("CREATE TABLE test(id INT)")
+      conn.query("INSERT INTO test VALUE(10)")
+      conn.query("INSERT INTO test VALUE(20)")
+      conn.close
+
+      origin_path = File.join(@opts[:base_dir], @db["service_id"], "data")
+      dest_path = File.join(@opts[:base_dir], creds["service_id"])
+      FileUtils.mkdir_p(dest_path)
+      FileUtils.cp_r(origin_path, dest_path)
+
+      properties = {"is_restoring" => true}
+
+      db = @node.provision(@default_plan, creds, @default_version, properties)
+      @test_dbs[db] = []
+      conn = connect_to_mysql(db)
+      conn.query("select * from test").each(:symbolize_keys => true) do |row|
+        [10, 20].should include(row[:id])
+      end
+
+      EM.stop
+    end
+  end
+
   after :each do
     EM.run do
       @node.create_missing_pools if @node.use_warden
