@@ -39,8 +39,8 @@ GIT
 
 GIT
   remote: https://github.com/vchs/vcap-services-base.git
-  revision: 15ddb645229622347c5c7a25b74457887c56171d
-  ref: 15ddb64522
+  revision: 9e9374a6f17c3e7ee867abaa6bf5354aad3133cd
+  ref: 9e9374a6f
   specs:
     vcap_services_base (0.1.17)
       cf-uaa-lib
@@ -174,14 +174,14 @@ GEM
     equalizer (0.0.7)
     eventmachine (1.0.3)
     eventmachine_httpserver (0.2.1)
-    excon (0.28.0)
+    excon (0.31.0)
     fastercsv (1.5.5)
     fluent-logger (0.4.6)
       msgpack (>= 0.4.4, < 0.6.0, != 0.5.3, != 0.5.2, != 0.5.1, != 0.5.0)
       yajl-ruby (~> 1.0)
-    fog (1.18.0)
+    fog (1.19.0)
       builder
-      excon (~> 0.28.0)
+      excon (~> 0.31.0)
       formatador (~> 0.2.0)
       mime-types
       multi_json (~> 1.0)
