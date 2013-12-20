@@ -146,6 +146,7 @@ class VCAP::Services::Mysql::Provisioner < VCAP::Services::Base::Provisioner
     configuration["peers"] = peers_config
     credentials["peers"] = peers_config if best_nodes.size > 1
     configuration["backup_peer"] = get_backup_peer(credentials)
+    configuration["properties"] = { :is_restoring => is_restoring?(service_id) }
 
     recipes = VCAP::Services::Internal::ServiceRecipes.new
     recipes.credentials = credentials
