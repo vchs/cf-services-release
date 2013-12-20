@@ -5,6 +5,7 @@ describe VCAP::Services::Mysql::Provisioner do
     described_class.any_instance.stub(:initialize)
     subject.instance_variable_set(:@free_ports, {})
     subject.instance_variable_set(:@logger, getLogger)
+    described_class.any_instance.stub(:is_restoring?).and_return(false)
   end
 
   describe ".generate_recipes" do

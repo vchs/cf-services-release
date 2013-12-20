@@ -29,6 +29,10 @@ module VCAP::Services::MSSQL
     include VCAP::Services::MSSQL::Task
   end
 
+  class RestoreTask
+    include VCAP::Services::MSSQL::Task
+  end
+
   module Messages
     class BackupTaskResponse < ServiceMessage
       required :id
