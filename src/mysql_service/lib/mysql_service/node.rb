@@ -440,12 +440,14 @@ class VCAP::Services::Mysql::Node
     raise "Invalid binding options format #{binding_options.inspect}" unless binding_options.kind_of?(Hash) && binding_options["privileges"]
     binding_privileges = binding_options["privileges"]
     raise "Invalid binding privileges type #{binding_privileges.class}" unless binding_privileges.kind_of?(Array)
+
     fetch_pool(service_id).with_connection do |connection|
+      escaped_password = connection.escape(password)
       grant = { "FULL" => "ALL", "READ_ONLY" => "SELECT" }
       binding_privileges.each do |privilege|
         ['%', 'localhost'].each do |host|
           raise "Unknown binding privileges #{privilege} for database #{database}, username #{username}, password #{password}" unless grant[privilege]
-          connection.query("GRANT #{grant[privilege]} ON #{database}.* to #{username}@'#{host}' IDENTIFIED BY '#{password}' WITH MAX_USER_CONNECTIONS #{@max_user_conns}")
+          connection.query("GRANT #{grant[privilege]} ON #{database}.* to #{username}@'#{host}' IDENTIFIED BY '#{escaped_password}' WITH MAX_USER_CONNECTIONS #{@max_user_conns}")
         end
       end
       connection.query("FLUSH PRIVILEGES")

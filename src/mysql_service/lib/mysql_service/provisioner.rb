@@ -101,8 +101,14 @@ class VCAP::Services::Mysql::Provisioner < VCAP::Services::Base::Provisioner
   # also contains info of all peers in multi-peers topology, a multi-peers aware
   # application can connect to both active and passive peer on demand.
   #
-  def generate_recipes(service_id, plan_config, version, best_nodes, original_creds=nil)
-    credentials = {}
+  def generate_recipes(service_id, plan_config, version, best_nodes, original_creds, user_specified_creds)
+    #Check Password's validness, assume the caller has filtered invalid-formatted password
+    new_password = user_specified_creds && user_specified_creds.is_a?(Hash) ? user_specified_creds['password'] : nil
+    old_password = original_creds && original_creds.is_a?(Hash) ? original_creds['password'] : nil
+    password = new_password || old_password
+    puts password
+    raise ServiceError.new(ServiceError::NO_CREDENTIAL) unless password
+
     configuration = {
       "version" => version,
       "plan" => plan_config.keys.first.to_s,
@@ -110,11 +116,12 @@ class VCAP::Services::Mysql::Provisioner < VCAP::Services::Base::Provisioner
     peers_config = []
     name = 'd' + generate_credential(password_length)
     user = 'u' + generate_credential(password_length)
-    password = 'p' + generate_credential(password_length)
+
 
     # restoring from another instance
+    # TODO: we need reset name,user in case of Restoring to support Plan100
     if original_creds && original_creds.key?("name")
-      name, user, password = %w(name user password).map { |key| original_creds[key] }
+      name, user = %w(name user).map { |key| original_creds[key] }
     end
 
     # configure active node
@@ -151,9 +158,6 @@ class VCAP::Services::Mysql::Provisioner < VCAP::Services::Base::Provisioner
     recipes.credentials = credentials
     recipes.configuration = configuration
     recipes
-  rescue => e
-    @logger.error("Exception in generate_recipes, #{e}")
-    @logger.error(e)
   end
 
   def gen_credential(node_id, database, username, password, host, port, service_id)
