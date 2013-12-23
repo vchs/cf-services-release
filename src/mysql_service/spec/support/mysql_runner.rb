@@ -1,5 +1,6 @@
 class MysqlRunner < ComponentRunner
   def start_redis
+    puts 'starting redis'
     add_pid Process.spawn "redis-server #{asset "redis.conf"}", log_options(:redis)
     wait_for_tcp_ready("Redis", 5454)
   end

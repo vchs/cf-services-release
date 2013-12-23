@@ -21,7 +21,9 @@ describe VCAP::Services::MSSQL::Provisioner do
         }]
         plan_config = {:free => {:lowwater => 10}}
 
-        recipes = subject.generate_recipes(service_id, plan_config , version, best_nodes)
+        recipes = subject.generate_recipes(service_id, plan_config , version, best_nodes,
+                                           { 'user_specified_credentials' => { 'password' => 'password' }
+                                           })
 
         config = recipes.configuration
         config.should be_instance_of Hash
