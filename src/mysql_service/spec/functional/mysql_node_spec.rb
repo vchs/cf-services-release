@@ -53,6 +53,8 @@ end
 describe "Mysql server node", components: [:nats], hook: :all do
   include VCAP::Services::Mysql
 
+  PASSWORD = 'default_password'
+
   before :each do
     @opts = getNodeTestConfig
     @opts.freeze
@@ -60,7 +62,6 @@ describe "Mysql server node", components: [:nats], hook: :all do
     @default_version = @opts[:default_version]
     @default_opts = {"privileges" => ["FULL"]}
     @tmpfiles = []
-
     # Setup code must be wrapped in EM.run
     EM.run do
       @node = VCAP::Services::Mysql::Node.new(@opts)
@@ -68,10 +69,23 @@ describe "Mysql server node", components: [:nats], hook: :all do
     end
   end
 
+  def new_instance(node, cred_opts = {}, recreate_service_id = true, plan = nil, properties = {})
+    @creds ||= {
+        "name"     => 'pooltest',
+        "user"     => 'user',
+        "password" => PASSWORD
+
+    }
+
+    creds = @creds.merge(cred_opts)
+    creds['service_id'] =  UUIDTools::UUID.random_create.to_s if recreate_service_id
+    node.provision(plan || @default_plan, creds, @default_version, properties)
+  end
+
   before :each do
     @test_dbs = {}# for cleanup
     # Create one db be default
-    @db = @node.provision(@default_plan, nil, @default_version)
+    @db = new_instance(@node)
     @db.should_not == nil
     @db["service_id"].should be
     @db["name"].should be
@@ -79,14 +93,10 @@ describe "Mysql server node", components: [:nats], hook: :all do
     @db["host"].should == @db["hostname"]
     @db["port"].should be
     @db["user"].should == @db["username"]
-    @db["password"].should be
     @test_dbs[@db] = []
     @db_instance = @node.mysqlProvisionedService.get(@db["service_id"])
   end
 
-  def new_instance
-    @node.provision(@default_plan, nil, @default_version)
-  end
 
   it "should connect to mysql database" do
     EM.run do
@@ -110,9 +120,20 @@ describe "Mysql server node", components: [:nats], hook: :all do
   it "should provison a database with correct credential" do
     EM.run do
       @db.should be_instance_of Hash
-      conn = connect_to_mysql(@db)
+      conn = connect_to_mysql(@db, PASSWORD)
       expect {conn.query("SELECT 1")}.to_not raise_error
       EM.stop
+    end
+  end
+
+  it "should be able to update credentials" do
+    EM.run do
+     new_password = '\'); drop user root@\'%\'; SET PASSWORD FOR \'root\'@\'localhost\' = PASSWORD(\')'
+
+     @node.update_credentials(@db["service_id"], {'password' => new_password }  )
+     conn = connect_to_mysql(@db, new_password)
+     expect {conn.query("Select 1")}.to_not raise_error
+     EM.stop
     end
   end
 
@@ -146,9 +167,9 @@ describe "Mysql server node", components: [:nats], hook: :all do
       opts[:max_db_size] = 256.0/1024 + extra_size[@db["name"]].to_f / 1024 / 1024
       node = new_node(opts)
       EM.add_timer(1) do
-        binding = node.bind(@db["service_id"],  @default_opts)
+        binding = node.bind(@db["service_id"],  @default_opts, {'password' => PASSWORD})
         @test_dbs[@db] << binding
-        conn = connect_to_mysql(binding)
+        conn = connect_to_mysql(binding, PASSWORD)
         conn.query("create table test(data text)")
         c =  [('a'..'z'),('A'..'Z')].map{|i| Array(i)}.flatten
         256.times do
@@ -159,30 +180,30 @@ describe "Mysql server node", components: [:nats], hook: :all do
         end
         # force table status update
         conn.close
-        conn = connect_to_mysql(binding)
+        conn = connect_to_mysql(binding, PASSWORD)
         conn.query("analyze table test")
 
         EM.add_timer(3) do
           expect {conn.query('SELECT 1')}.to raise_error
           conn.close
-          conn = connect_to_mysql(binding)
+          conn = connect_to_mysql(binding, PASSWORD)
           # write privilege should be rovoked.
           expect{ conn.query("insert into test value('test')")}.to raise_error(Mysql2::Error)
-          conn = connect_to_mysql(@db)
+          conn = connect_to_mysql(@db, PASSWORD)
           expect{ conn.query("insert into test value('test')")}.to raise_error(Mysql2::Error)
           # new binding's write privilege should also be revoked.
-          new_binding = node.bind(@db["service_id"], @default_opts)
+          new_binding = node.bind(@db["service_id"], @default_opts, {'password' => PASSWORD})
           @test_dbs[@db] << new_binding
-          new_conn = connect_to_mysql(new_binding)
+          new_conn = connect_to_mysql(new_binding, PASSWORD)
           expect { new_conn.query("insert into test value('new_test')")}.to raise_error(Mysql2::Error)
           EM.add_timer(3) do
             expect {conn.query('SELECT 1')}.to raise_error
             conn.close
-            conn = connect_to_mysql(binding)
+            conn = connect_to_mysql(binding, PASSWORD)
             conn.query("truncate table test")
             # write privilege should restore
             EM.add_timer(2) do
-              conn = connect_to_mysql(binding)
+              conn = connect_to_mysql(binding, PASSWORD)
               expect{ conn.query("insert into test value('test')")}.to_not raise_error
               256.times do
                 content = (0..1022).map{ c[rand(c.size)] }.join
@@ -191,17 +212,17 @@ describe "Mysql server node", components: [:nats], hook: :all do
 
               # force table status update
               conn.close
-              conn = connect_to_mysql(binding)
+              conn = connect_to_mysql(binding, PASSWORD)
               conn.query("analyze table test")
 
               EM.add_timer(3) do
                 expect { conn.query('SELECT 1') }.to raise_error
                 conn.close
-                conn = connect_to_mysql(binding)
+                conn = connect_to_mysql(binding, PASSWORD)
                 expect{ conn.query("insert into test value('test')") }.to raise_error(Mysql2::Error)
                 conn.query("drop table test")
                 EM.add_timer(2) do
-                  conn = connect_to_mysql(binding)
+                  conn = connect_to_mysql(binding, PASSWORD)
                   expect { conn.query("create table test(data text)") }.to_not raise_error
                   expect { conn.query("insert into test value('test')") }.to_not raise_error
                   EM.stop
@@ -241,8 +262,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
   it "should return correct instances & binding list" do
     EM.run do
       before_ins_list = @node.all_instances_list
-      plan = "free"
-      tmp_db = new_instance
+      tmp_db = new_instance(@node)
       @test_dbs[tmp_db] = []
       after_ins_list = @node.all_instances_list
       before_ins_list << tmp_db["service_id"]
@@ -269,7 +289,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
         mal_plan = "not-a-plan"
         db = nil
         expect {
-          db = @node.provision(mal_plan, nil, @default_version)
+          db = new_instance(@node, { "name" => "malformed_request" }, false, mal_plan)
         }.to raise_error(VCAP::Services::Mysql::MysqlError, /Invalid plan .*/)
         db.should == nil
         db_num.should == connection.query("show databases;").count
@@ -286,7 +306,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
       node = new_node(opts)
       EM.add_timer(1) do
         expect {
-          db = node.provision(@default_plan, nil, @default_version)
+          db = new_instance(node, { "name" => "overprovision" })
           @test_dbs[db] = []
         }.to_not raise_error
         EM.stop
@@ -296,11 +316,11 @@ describe "Mysql server node", components: [:nats], hook: :all do
 
   it "should not allow old credential to connect if service is unprovisioned" do
     EM.run do
-      conn = connect_to_mysql(@db)
+      conn = connect_to_mysql(@db, PASSWORD)
       expect {conn.query("SELECT 1")}.to_not raise_error
       msg = Yajl::Encoder.encode(@db)
       @node.unprovision(@db["service_id"], [])
-      expect {connect_to_mysql(@db)}.to raise_error
+      expect {connect_to_mysql(@db, PASSWORD)}.to raise_error
       error = nil
       EM.stop
     end
@@ -326,7 +346,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
       pool_size = @node.pools.size
       free_port_size = @node.free_ports.size if @node.use_warden
 
-      db = @node.provision(@default_plan, nil, @default_version)
+      db = new_instance(@node, { "name" => "valChange" })
       @node.pools.size.should == (pool_size + 1)
       @node.pools.should have_key(db["service_id"])
       @node.mysqlProvisionedService.get(db["service_id"]).should_not == nil
@@ -349,8 +369,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
 
   it "should not be possible to access one database using null or wrong credential" do
     EM.run do
-      plan = "free"
-      db2 = new_instance
+      db2 = new_instance(@node, {'name' => 'anotherdb'})
       @test_dbs[db2] = []
       fake_creds = []
       3.times {fake_creds << @db.clone}
@@ -375,7 +394,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
         opts[:max_long_tx] = 1
         node = new_node(opts)
         EM.add_timer(1) do
-          conn = connect_to_mysql(@db)
+          conn = connect_to_mysql(@db, PASSWORD)
           # prepare a transaction and not commit
           conn.query("create table a(id int) engine=innodb")
           conn.query("insert into a value(10)")
@@ -388,7 +407,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
             node.varz_details[:long_transactions_killed].should be > old_killed
 
             node.instance_variable_set(:@kill_long_tx, false)
-            conn = connect_to_mysql(@db)
+            conn = connect_to_mysql(@db, PASSWORD)
             # prepare a transaction and not commit
             conn.query("begin")
             conn.query("select * from a for update")
@@ -415,11 +434,11 @@ describe "Mysql server node", components: [:nats], hook: :all do
   it "should kill long queries" do
     pending "Disable for non-Percona server since the test behavior varies on regular Mysql server." unless @node.is_percona_server?(@db["service_id"])
     EM.run do
-      db = new_instance
+      db = new_instance(@node)
       @test_dbs[db] = []
       opts = @opts.dup
       opts[:max_long_query] = 1
-      conn = connect_to_mysql(db)
+      conn = connect_to_mysql(db, PASSWORD)
       node = new_node(opts)
       EM.add_timer(1) do
         conn.query('create table test(id INT) engine innodb')
@@ -429,7 +448,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
         conn.query('select * from test where id = 10 for update')
         old_counter = node.varz_details[:long_queries_killed]
 
-        conn2 = connect_to_mysql(db)
+        conn2 = connect_to_mysql(db, PASSWORD)
         err = nil
         t = Thread.new do
           begin
@@ -454,6 +473,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
   end
 
   it "should create a new credential when binding" do
+    pending 'binding is undesigned in vchs yet'
     EM.run do
       binding = @node.bind(@db["service_id"],  @default_opts)
       binding["service_id"].should == @db["service_id"]
@@ -472,6 +492,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
   end
 
   it "should allow access with different binding options" do
+    pending 'binding is undesigned in vchs yet'
     EM.run do
       binding_opts1 = { "privileges" => ["FULL"] }
       binding_opts2 = { "privileges" => ["READ_ONLY"] }
@@ -491,6 +512,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
   end
 
   it "should forbid access for wrong binding options" do
+    pending 'binding is undesigned in vchs yet'
     EM.run do
       binding_opts1 = ["FULL"]
       expect { @node.bind(@db["service_id"], binding_opts1) }.to raise_error(RuntimeError, /Invalid binding options format/)
@@ -503,6 +525,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
   end
 
   it "should supply different credentials when binding evoked with the same input" do
+    pending 'binding is undesigned in vchs yet'
     EM.run do
       binding = @node.bind(@db["service_id"], @default_opts)
       binding2 = @node.bind(@db["service_id"], @default_opts)
@@ -514,6 +537,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
   end
 
   it "should delete credential after unbinding" do
+    pending 'binding is undesigned in vchs yet'
     EM.run do
       binding = @node.bind(@db["service_id"], @default_opts)
       @test_dbs[@db] << binding
@@ -544,15 +568,15 @@ describe "Mysql server node", components: [:nats], hook: :all do
     EM.run do
       node = new_node(@opts)
       EM.add_timer(1) do
-        db = node.provision(@default_plan, nil, @default_version)
+        db = new_instance(node, { "name" => "retain_test"})
         @test_dbs[db] = []
-        conn = connect_to_mysql(db)
+        conn = connect_to_mysql(db, PASSWORD)
         conn.query('create table test(id int)')
         # simulate we restart the node
         node.shutdown
         node = new_node(@opts)
         EM.add_timer(1) do
-          conn2 = connect_to_mysql(db)
+          conn2 = connect_to_mysql(db, PASSWORD)
           result = conn2.query('show tables')
           result.count.should == 1
           EM.stop
@@ -602,7 +626,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
   it "should provide provision/binding served info in varz" do
     EM.run do
       v1 = @node.varz_details
-      db = new_instance
+      db = new_instance(@node)
       binding = @node.bind(db["service_id"], @default_opts)
       @test_dbs[db] = [binding]
       v2 = @node.varz_details
@@ -688,7 +712,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
       threads = []
       NUM.times do
         threads << Thread.new do
-          db = new_instance
+          db = new_instance(@node)
           binding = @node.bind(db["service_id"], @default_opts)
           @node.unprovision(db["service_id"], [binding])
         end
@@ -706,11 +730,11 @@ describe "Mysql server node", components: [:nats], hook: :all do
       opts[:max_user_conns] = 1 # easy for testing
       node = new_node(opts)
       EM.add_timer(1) do
-        db = node.provision(@default_plan, nil, @default_version)
-        binding = node.bind(db["service_id"],  @default_opts)
+        db = new_instance(node)
+        binding = node.bind(db["service_id"],  @default_opts, {'password' => PASSWORD})
         @test_dbs[db] = [binding]
-        expect { conn = connect_to_mysql(db) }.to_not raise_error
-        expect { conn = connect_to_mysql(binding) }.to_not raise_error
+        expect { conn = connect_to_mysql(db, PASSWORD) }.to_not raise_error
+        expect { conn = connect_to_mysql(binding, PASSWORD) }.to_not raise_error
         EM.stop
       end
     end
@@ -774,6 +798,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
     end
   end
 
+  #TODO: Need move above since we already use given credential now
   it "should provision instance according to the provided credential" do
     EM.run do
       node = new_node(@opts)
@@ -781,11 +806,10 @@ describe "Mysql server node", components: [:nats], hook: :all do
         "service_id" => "testid",
         "name" => "testdbname",
         "user" => "testuser",
-        "password" => "testpass",
         "port" => 25555,
       }
       EM.add_timer(1) do
-        db = node.provision(@default_plan, creds, @default_version)
+        db = new_instance(node, creds.merge({"password" => "testpass"}), false)
         @test_dbs[db] = []
         creds.keys.each do |k|
           db[k].should eq creds[k]
@@ -795,26 +819,13 @@ describe "Mysql server node", components: [:nats], hook: :all do
     end
   end
 
-  it "should provision the instance and overwrite the instance with same port" do
+  it "should always take recipe as valid in case of port conflict" do
     EM.run do
-      node = new_node(@opts)
-      creds = {
-        "service_id" => "testid",
-        "name" => "testdbname",
-        "user" => "testuser",
-        "password" => "testpass",
-        "port" => 25555,
-      }
       EM.add_timer(1) do
-        db1 = node.provision(@default_plan, creds, @default_version)
-        creds["name"] = "testdbname2"
-        db2 = node.provision(@default_plan, creds, @default_version)
-        expect { conn = connect_to_mysql(db1) }.to raise_error
-        expect { conn = connect_to_mysql(db2) }.to_not raise_error
-        @test_dbs[db2] = []
-        creds.keys.each do |k|
-          db2[k].should eq creds[k]
-        end
+        db = new_instance(@node, { "port" => @db['port'], "password" => "new_password" } )
+        expect { conn = connect_to_mysql(@db, PASSWORD) }.to raise_error
+        expect { conn = connect_to_mysql(db, "new_password") }.to_not raise_error
+        @test_dbs[db] = []
         EM.stop
       end
     end
@@ -824,15 +835,11 @@ describe "Mysql server node", components: [:nats], hook: :all do
     EM.run do
       node = new_node(@opts)
       creds = {
-        "service_id" => "testid",
-        "name" => "testdbname",
-        "user" => "testuser",
-        "password" => "testpass",
         "port" => 25555,
       }
       EM.add_timer(1) do
         node.new_port(creds["port"])
-        expect{ node.provision(@default_plan, creds, @default_version) }
+        expect{  new_instance(node, creds) }
           .to raise_error(VCAP::Services::Base::Error::ServiceError,
                           /port.*in use/)
         EM.stop
@@ -847,11 +854,10 @@ describe "Mysql server node", components: [:nats], hook: :all do
         "service_id" => "new_instance",
         "name"       => @db["name"],
         "user"       => @db["user"],
-        "password"   => @db["password"],
         "port"       => 25555,
       }
 
-      conn = connect_to_mysql(@db)
+      conn = connect_to_mysql(@db, PASSWORD)
       conn.query("CREATE TABLE test(id INT)")
       conn.query("INSERT INTO test VALUE(10)")
       conn.query("INSERT INTO test VALUE(20)")
@@ -864,9 +870,9 @@ describe "Mysql server node", components: [:nats], hook: :all do
 
       properties = {"is_restoring" => true}
 
-      db = @node.provision(@default_plan, creds, @default_version, properties)
+      db = new_instance(@node,  creds, false, @default_plan, properties)
       @test_dbs[db] = []
-      conn = connect_to_mysql(db)
+      conn = connect_to_mysql(db, PASSWORD)
       conn.query("select * from test").each(:symbolize_keys => true) do |row|
         [10, 20].should include(row[:id])
       end
