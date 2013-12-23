@@ -70,8 +70,15 @@ describe "Mysql server node", components: [:nats], hook: :all do
 
   before :each do
     @test_dbs = {}# for cleanup
+    @creds = {
+        "service_id" => UUIDTools::UUID.random_create.to_s,
+        "name"     => 'pooltest',
+        "user"     => 'user',
+        "password" => 'node_spec_password'
+
+    }
     # Create one db be default
-    @db = @node.provision(@default_plan, nil, @default_version)
+    @db = @node.provision(@default_plan, @creds, @default_version)
     @db.should_not == nil
     @db["service_id"].should be
     @db["name"].should be
@@ -84,8 +91,9 @@ describe "Mysql server node", components: [:nats], hook: :all do
     @db_instance = @node.mysqlProvisionedService.get(@db["service_id"])
   end
 
-  def new_instance
-    @node.provision(@default_plan, nil, @default_version)
+  def new_instance(plan = nil, cred_opts = {})
+    creds = @creds.merge({ "service_id" => UUIDTools::UUID.random_create.to_s }).merge(cred_opts)
+    @node.provision(plan || @default_plan, creds, @default_version)
   end
 
   it "should connect to mysql database" do
@@ -269,7 +277,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
         mal_plan = "not-a-plan"
         db = nil
         expect {
-          db = @node.provision(mal_plan, nil, @default_version)
+          db = new_instance(mal_plan, { "name" => "malformed_request" })
         }.to raise_error(VCAP::Services::Mysql::MysqlError, /Invalid plan .*/)
         db.should == nil
         db_num.should == connection.query("show databases;").count
@@ -286,7 +294,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
       node = new_node(opts)
       EM.add_timer(1) do
         expect {
-          db = node.provision(@default_plan, nil, @default_version)
+          db = new_instance(nil, { "name" => "overprovision" })
           @test_dbs[db] = []
         }.to_not raise_error
         EM.stop
@@ -326,7 +334,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
       pool_size = @node.pools.size
       free_port_size = @node.free_ports.size if @node.use_warden
 
-      db = @node.provision(@default_plan, nil, @default_version)
+      db = new_instance(nil, { "name" => "valChange" })
       @node.pools.size.should == (pool_size + 1)
       @node.pools.should have_key(db["service_id"])
       @node.mysqlProvisionedService.get(db["service_id"]).should_not == nil
@@ -350,7 +358,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
   it "should not be possible to access one database using null or wrong credential" do
     EM.run do
       plan = "free"
-      db2 = new_instance
+      db2 = new_instance(nil, {'name' => 'anotherdb'})
       @test_dbs[db2] = []
       fake_creds = []
       3.times {fake_creds << @db.clone}
@@ -544,7 +552,8 @@ describe "Mysql server node", components: [:nats], hook: :all do
     EM.run do
       node = new_node(@opts)
       EM.add_timer(1) do
-        db = node.provision(@default_plan, nil, @default_version)
+        db = node.provision(@default_plan, @creds.merge({ "name" => "retain_test",
+                                                        'service_id' => UUIDTools::UUID.random_create.to_s}), @default_version)
         @test_dbs[db] = []
         conn = connect_to_mysql(db)
         conn.query('create table test(id int)')
@@ -706,7 +715,8 @@ describe "Mysql server node", components: [:nats], hook: :all do
       opts[:max_user_conns] = 1 # easy for testing
       node = new_node(opts)
       EM.add_timer(1) do
-        db = node.provision(@default_plan, nil, @default_version)
+        creds = @creds.merge({ "service_id" => UUIDTools::UUID.random_create.to_s })
+        db = node.provision(@default_plan, creds, @default_version)
         binding = node.bind(db["service_id"],  @default_opts)
         @test_dbs[db] = [binding]
         expect { conn = connect_to_mysql(db) }.to_not raise_error
@@ -774,6 +784,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
     end
   end
 
+  #TODO: Need move above since we already use given credential now
   it "should provision instance according to the provided credential" do
     EM.run do
       node = new_node(@opts)
@@ -796,6 +807,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
   end
 
   it "should provision the instance and overwrite the instance with same port" do
+    pending 'is this a valid case?'
     EM.run do
       node = new_node(@opts)
       creds = {
