@@ -46,9 +46,7 @@ describe "vCHS mysql service", components: [:nats, :sc, :sc_mysql], hook: :all d
     end
 
     it "can connect to instance" do
-      # Let Sequel to use mysql2 gem
-      uri = credentials.fetch("uri").gsub(/^mysql:/, "mysql2:")
-      expect_statement_allowed!(uri, 'show tables')
+      pending "not implemented"
     end
 
     after(:all) { sc_delete_instance(guid) }
