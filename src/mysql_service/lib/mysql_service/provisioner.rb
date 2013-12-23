@@ -101,21 +101,28 @@ class VCAP::Services::Mysql::Provisioner < VCAP::Services::Base::Provisioner
   # also contains info of all peers in multi-peers topology, a multi-peers aware
   # application can connect to both active and passive peer on demand.
   #
-  def generate_recipes(service_id, plan_config, version, best_nodes, original_creds=nil)
-    credentials = {}
+  def generate_recipes(service_id, plan_config, version, best_nodes, extra_opts = {})
+    original_creds = extra_opts['original_credentials']
+    user_specified_creds = extra_opts['user_specified_credentials']
+
+    is_restoring = extra_opts['is_restoring']
+
+    #Check Password's validness, assume the caller has filtered invalid-formatted password
+    password = user_specified_creds['password'] rescue nil
+    raise ServiceError.new(ServiceError::NO_CREDENTIAL) unless ( is_restoring || password)
+
     configuration = {
       "version" => version,
       "plan" => plan_config.keys.first.to_s,
     }
     peers_config = []
-    name = 'd' + generate_credential(password_length)
-    user = 'u' + generate_credential(password_length)
-    password = 'p' + generate_credential(password_length)
 
-    # restoring from another instance
-    if original_creds && original_creds.key?("name")
-      name, user, password = %w(name user password).map { |key| original_creds[key] }
+    # TBD: should we reset name, user values for Plan100 Restoring
+    if is_restoring
+      name, user = %w(name user).map { |key| original_creds[key] rescue nil }
     end
+    name ||= 'd' + generate_credential(password_length)
+    user ||= 'u' + generate_credential(password_length)
 
     # configure active node
     active_node = best_nodes.shift
@@ -146,15 +153,12 @@ class VCAP::Services::Mysql::Provisioner < VCAP::Services::Base::Provisioner
     configuration["peers"] = peers_config
     credentials["peers"] = peers_config if best_nodes.size > 1
     configuration["backup_peer"] = get_backup_peer(credentials)
-    configuration["properties"] = { :is_restoring => is_restoring?(service_id) }
+    configuration["properties"] = { :is_restoring => extra_opts['is_restoring'] }
 
     recipes = VCAP::Services::Internal::ServiceRecipes.new
     recipes.credentials = credentials
     recipes.configuration = configuration
     recipes
-  rescue => e
-    @logger.error("Exception in generate_recipes, #{e}")
-    @logger.error(e)
   end
 
   def gen_credential(node_id, database, username, password, host, port, service_id)
