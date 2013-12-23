@@ -1,4 +1,32 @@
 GIT
+  remote: https://github.com/Henry-CF/vcap-services-base.git
+  revision: 7b43d016a1fe5d33cac34f7ee6417cb7569d9540
+  ref: 7b43d016a1
+  specs:
+    vcap_services_base (0.1.17)
+      cf-uaa-lib
+      curb (~> 0.7.16)
+      data_mapper (~> 1.2)
+      do_sqlite3
+      em-http-request (~> 1.0)
+      eventmachine (~> 1.0)
+      eventmachine_httpserver (~> 0.2.1)
+      fog
+      json
+      nats (>= 0.4.22.beta.8, < 0.4.28)
+      resque (~> 1.20)
+      resque-status (~> 0.4.1)
+      ruby-hmac (~> 0.4.0)
+      rubyzip (~> 0.9.8)
+      sinatra (>= 1.2.3)
+      thin (>= 1.3.1)
+      vcap_common (>= 2.2.1)
+      vcap_logging (>= 1.0.2)
+      vcap_services_messages
+      warden-client
+      warden-protocol
+
+GIT
   remote: https://github.com/cloudfoundry/common.git
   revision: b96ec1192d961925d91e17ca3831f8547489d918
   ref: b96ec1192
@@ -28,37 +56,9 @@ GIT
       yajl-ruby
 
 GIT
-  remote: https://github.com/vchs/vcap-services-base.git
-  revision: 9e9374a6f17c3e7ee867abaa6bf5354aad3133cd
-  ref: 9e9374a6f
-  specs:
-    vcap_services_base (0.1.17)
-      cf-uaa-lib
-      curb (~> 0.7.16)
-      data_mapper (~> 1.2)
-      do_sqlite3
-      em-http-request (~> 1.0)
-      eventmachine (~> 1.0)
-      eventmachine_httpserver (~> 0.2.1)
-      fog
-      json
-      nats (>= 0.4.22.beta.8, < 0.4.28)
-      resque (~> 1.20)
-      resque-status (~> 0.4.1)
-      ruby-hmac (~> 0.4.0)
-      rubyzip (~> 0.9.8)
-      sinatra (>= 1.2.3)
-      thin (>= 1.3.1)
-      vcap_common (>= 2.2.1)
-      vcap_logging (>= 1.0.2)
-      vcap_services_messages
-      warden-client
-      warden-protocol
-
-GIT
   remote: https://github.com/vchs/vcap-services-messages
-  revision: ea67f4dfe26ee4a686d8cbe36cf7f4fecb898e64
-  branch: ea67f4dfe2
+  revision: 1bdf2e96c93746999479c194373ac573d931a25e
+  ref: 1bdf2e96c
   specs:
     vcap_services_messages (0.1)
       json
@@ -76,7 +76,7 @@ GEM
       ice_nine (~> 0.9)
     backports (3.3.5)
     bcrypt-ruby (3.1.2)
-    beefcake (0.4.0)
+    beefcake (0.5.0)
     builder (3.2.2)
     cf-uaa-lib (2.0.0)
       multi_json

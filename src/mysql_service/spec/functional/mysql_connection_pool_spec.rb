@@ -29,10 +29,17 @@ describe 'Mysql Connection Pool Test', components: [:nats], hook: :all do
     @mysql_configs = @opts[:mysql]
     @default_version = @opts[:default_version]
     @use_warden = @opts[:use_warden]
+    creds = {
+        "service_id" => UUIDTools::UUID.random_create.to_s,
+        "name"     => 'pooltest',
+        "user"     => 'user',
+        "password" => 'password',
+    }
+    @db = nil
     EM.run do
       @node = VCAP::Services::Mysql::Node.new(@opts)
       EM.add_timer(1) do
-        @db = @node.provision(@opts[:plan], nil, @default_version)
+        @db = @node.provision(@opts[:plan], creds, @default_version)
         @db_instance = @node.mysqlProvisionedService.get(@db["service_id"])
         EM.stop
       end
@@ -42,7 +49,7 @@ describe 'Mysql Connection Pool Test', components: [:nats], hook: :all do
 
   after :all do
     EM.run do
-      @node.unprovision(@db["name"], [])
+      @node.unprovision(@db["service_id"], []) if @db
       EM.stop
     end if @use_warden
   end
