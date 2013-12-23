@@ -87,8 +87,8 @@ def getLogger()
   return logger
 end
 
-def connect_to_mysql(options)
-  host, user, password, port, db =  %w{hostname user password port name}.map { |opt| options[opt] }
+def connect_to_mysql(creds, password)
+  host, user, port, db =  %w{hostname user port name}.map { |opt| creds[opt] }
   Mysql2::Client.new(:host => host, :username => user, :password => password, :database => db, :port => port)
 end
 
