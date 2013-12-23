@@ -9,24 +9,52 @@ describe VCAP::Services::Mysql::Provisioner do
   end
 
   describe ".generate_recipes" do
-    shared_context "use original credentials" do
-      it "be able to use original_creds" do
+    shared_context 'generate correct credentials' do
+      it 'be able to reuse password from original_creds' do
         test_str = "n" * subject.dbname_length
         creds = {
-          "name"     => "d#{test_str}",
-          "wame"     => "u#{test_str}",
           "password" => "p#{test_str}"
         }
 
-        recipes = subject.generate_recipes(@service_id, {@plan.to_sym => {}},
-                                           @version, @best_nodes, creds)
+        recipes = subject.generate_recipes(@service_id, {@plan.to_sym => {}}, @version, @best_nodes,
+                                           { 'original_credentials' => creds })
         credentials = recipes.credentials
-        %w(name user password).each { |key| credentials[key].should eq creds[key] }
+        credentials['password'].should eq creds['password']
         peers = recipes.configuration["peers"]
         peers.each do |peer|
           peer_creds = peer["credentials"]
-          %w(name user password).each { |key| credentials[key].should eq creds[key] }
+          peer_creds['password'].should eq creds['password']
         end
+      end
+
+      it 'should support password overwritten' do
+        test_str = "n" * subject.dbname_length
+        creds = {
+            "name"     => "d#{test_str}",
+            "user"     => "u#{test_str}",
+            "password" => "p#{test_str}"
+        }
+
+        NEW_PASSWORD = 'newpassword'
+        recipes = subject.generate_recipes(@service_id, {@plan.to_sym => {}}, @version, @best_nodes,
+                                           { 'original_credentials' => creds,
+                                             'user_specified_credentials' => { 'password' => NEW_PASSWORD }
+                                           })
+        credentials = recipes.credentials
+        %w(name user).each { |key| credentials[key].should eq creds[key] }
+        credentials['password'].should eq NEW_PASSWORD
+        peers = recipes.configuration["peers"]
+        peers.each do |peer|
+          peer_creds = peer["credentials"]
+          peer_creds['password'].should eq NEW_PASSWORD
+        end
+      end
+
+      it 'raise error if password isn\'t given' do
+        expect {
+          subject.generate_recipes(@service_id, {@plan.to_sym => {}},
+                                   @version, @best_nodes, {}, {})
+        }.to raise_error
       end
     end
 
@@ -42,11 +70,12 @@ describe VCAP::Services::Mysql::Provisioner do
     end
 
     context "for single peer topology" do
-      include_context "use original credentials"
+      include_context "generate correct credentials"
 
       it "generates a valid recipes" do
-        recipes = subject.generate_recipes(@service_id, {@plan.to_sym => {}},
-                                           @version, @best_nodes)
+        recipes = subject.generate_recipes(@service_id, {@plan.to_sym => {}}, @version, @best_nodes,
+                                           { 'user_specified_credentials' => { 'password' => 'password' }
+                                           })
         config = recipes.configuration
         config.should be
         credentials = recipes.credentials
@@ -66,19 +95,19 @@ describe VCAP::Services::Mysql::Provisioner do
         credentials["port"].should == VCAP::Services::Mysql::Provisioner::DEFAULT_PORTS_RANGE.first
       end
 
-      it "limit the dbname and password length" do
-        recipes = subject.generate_recipes(@service_id, {@plan.to_sym => {}},
-                                           @version, @best_nodes)
+      it "limit the dbname & user name length" do
+        recipes = subject.generate_recipes(@service_id, {@plan.to_sym => {}}, @version, @best_nodes,
+                                           { 'user_specified_credentials' => { 'password' => 'password' }
+                                           })
 
         name, username, passwd = %w{name username password}.map {|k| recipes.credentials[k]}
         name.length.should eq(subject.dbname_length + 1) # with one prefix 'd'
         username.length.should == (subject.password_length + 1)
-        passwd.length.should == (subject.password_length + 1)
       end
     end
 
     context "for multiple peers topology" do
-      include_context "use original credentials"
+      include_context "generate correct credentials"
 
       before do
         @service_id = subject.generate_service_id
@@ -97,8 +126,9 @@ describe VCAP::Services::Mysql::Provisioner do
       end
 
       it "generate valid recipes" do
-        recipes = subject.generate_recipes(@service_id, {@plan.to_sym => {}},
-                                           @version, @best_nodes)
+        recipes = subject.generate_recipes(@service_id, {@plan.to_sym => {}}, @version, @best_nodes,
+                                           { 'user_specified_credentials' => { 'password' => 'password' }
+                                           })
         peers = recipes.configuration["peers"]
         active_peers = peers.select {|p| p["role"] == "active"}
         passive_peers = peers.select {|p| p["role"] == "passive"}
@@ -110,8 +140,9 @@ describe VCAP::Services::Mysql::Provisioner do
       end
 
       it "use passive peer as backup peer" do
-        recipes = subject.generate_recipes(@service_id, {@plan.to_sym => {}},
-                                           @version, @best_nodes)
+        recipes = subject.generate_recipes(@service_id, {@plan.to_sym => {}}, @version, @best_nodes,
+                                           { 'user_specified_credentials' => { 'password' => 'password' }
+                                           })
         peers = recipes.configuration["peers"]
         backup_peer_id = recipes.configuration["backup_peer"]
         backup_peer = peers.find {|p| p["credentials"]["node_id"] == backup_peer_id }
