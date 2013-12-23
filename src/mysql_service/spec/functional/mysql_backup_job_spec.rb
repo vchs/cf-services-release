@@ -6,6 +6,7 @@ require 'mysql_service/job'
 module VCAP::Services::Mysql::Backup
   describe "backup jobs", components: [:nats], hook: :all do
     include VCAP::Services::Base::AsyncJob
+    PASSWORD = 'oldpassword'
     before :all do
       `which redis-server`
       pending "Redis not installed" unless $?.success?
@@ -30,14 +31,20 @@ module VCAP::Services::Mysql::Backup
       @default_plan = @opts[:plan]
       @default_version = @opts[:default_version]
       @use_warden = @opts[:use_warden]
+      creds = {
+          "service_id" => UUIDTools::UUID.random_create.to_s,
+          "name"     => 'pooltest',
+          "user"     => 'user',
+          "password" => PASSWORD,
+      }
       EM.run do
         @node = VCAP::Services::Mysql::Node.new(@opts)
         EM.add_timer(1) do
-          @db = @node.provision(@default_plan, nil, @default_version)
+          @db = @node.provision(@default_plan, creds, @default_version)
 
           @test_dbs << @db
 
-          conn = connect_to_mysql(@db)
+          conn = connect_to_mysql(@db, creds['password'])
           conn.query("CREATE TABLE test(id INT)")
           conn.query("INSERT INTO test VALUE(10)")
           conn.query("INSERT INTO test VALUE(20)")
@@ -68,6 +75,8 @@ module VCAP::Services::Mysql::Backup
    describe "create and restore backup jobs" do
 
       def subscribe_restore_channel(service_name, service_id_for_restore)
+        NATS.on_error { EM.stop }
+
         @client = NATS.connect(:uri => @config["mbus"])
         channel = "#{service_name}.restore_backup.#{service_id_for_restore}"
 
@@ -98,17 +107,17 @@ module VCAP::Services::Mysql::Backup
         File.exists?(file_to_check).should == true
       end
 
-      def check_data_in_new_db(service_id_for_restore)
+      def check_data_in_new_db(service_id_for_restore, old_password)
         EM.run do
           creds = {
             "service_id" => service_id_for_restore,
             "name"       => @db["name"],
             "user"       => @db["user"],
-            "password"   => @db["password"],
+            "password"   => old_password # restore always use old_password
           }
           db = @node.provision(@default_plan, creds, @default_version, {"is_restoring" => true})
           @test_dbs << db
-          conn = connect_to_mysql(db)
+          conn = connect_to_mysql(db, old_password)
           conn.query("select * from test").each(:symbolize_keys => true) do |row|
             [10, 20].should include(row[:id])
           end
@@ -141,7 +150,7 @@ module VCAP::Services::Mysql::Backup
           StorageClient.get_file("MyaaS", service_id, backup_id).should_not be_nil
         end
 
-        service_id_for_restore = UUIDTools::UUID.random_create.to_s
+        service_id_for_restore = "restored_db"
         EM.run do
           service_name = "MyaaS"
           subscribe_restore_channel(service_name, service_id_for_restore)
@@ -153,12 +162,12 @@ module VCAP::Services::Mysql::Backup
           end
 
         end
-        check_data_in_new_db(service_id_for_restore)
+        check_data_in_new_db(service_id_for_restore, PASSWORD)
       end
 
       it "should be able to handle user triggered backup & restore" do
         service_id = @db["service_id"]
-        service_id_for_restore = UUIDTools::UUID.random_create.to_s
+        service_id_for_restore = "user_restored_db"
         service_name = "MyaaS"
         backup_id = UUIDTools::UUID.random_create.to_s
         EM.run do
@@ -195,7 +204,7 @@ module VCAP::Services::Mysql::Backup
           end
         end
 
-        check_data_in_new_db(service_id_for_restore)
+        check_data_in_new_db(service_id_for_restore, PASSWORD)
       end
     end
   end
