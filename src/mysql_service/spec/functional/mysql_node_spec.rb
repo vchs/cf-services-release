@@ -60,6 +60,13 @@ describe "Mysql server node", components: [:nats], hook: :all do
     @default_version = @opts[:default_version]
     @default_opts = {"privileges" => ["FULL"]}
     @tmpfiles = []
+    @creds = {
+        "service_id" => UUIDTools::UUID.random_create.to_s,
+        "name"     => 'pooltest',
+        "user"     => 'user',
+        "password" => 'node_spec_password'
+
+    }
 
     # Setup code must be wrapped in EM.run
     EM.run do
@@ -70,8 +77,9 @@ describe "Mysql server node", components: [:nats], hook: :all do
 
   before :each do
     @test_dbs = {}# for cleanup
+
     # Create one db be default
-    @db = @node.provision(@default_plan, nil, @default_version)
+    @db = @node.provision(@default_plan, @creds, @default_version)
     @db.should_not == nil
     @db["service_id"].should be
     @db["name"].should be
@@ -85,7 +93,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
   end
 
   def new_instance
-    @node.provision(@default_plan, nil, @default_version)
+    @node.provision(@default_plan, @creds, @default_version)
   end
 
   it "should connect to mysql database" do
@@ -269,7 +277,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
         mal_plan = "not-a-plan"
         db = nil
         expect {
-          db = @node.provision(mal_plan, nil, @default_version)
+          db = @node.provision(mal_plan, @creds.merge({ "name" => "malformed_request" }), @default_version)
         }.to raise_error(VCAP::Services::Mysql::MysqlError, /Invalid plan .*/)
         db.should == nil
         db_num.should == connection.query("show databases;").count
@@ -286,7 +294,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
       node = new_node(opts)
       EM.add_timer(1) do
         expect {
-          db = node.provision(@default_plan, nil, @default_version)
+          db = node.provision(@default_plan, @creds.merge({ "name" => "overprovision" }), @default_version)
           @test_dbs[db] = []
         }.to_not raise_error
         EM.stop
@@ -326,7 +334,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
       pool_size = @node.pools.size
       free_port_size = @node.free_ports.size if @node.use_warden
 
-      db = @node.provision(@default_plan, nil, @default_version)
+      db = @node.provision(@default_plan, @creds.merge({ "name" => "varChange" }), @default_version)
       @node.pools.size.should == (pool_size + 1)
       @node.pools.should have_key(db["service_id"])
       @node.mysqlProvisionedService.get(db["service_id"]).should_not == nil
@@ -544,7 +552,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
     EM.run do
       node = new_node(@opts)
       EM.add_timer(1) do
-        db = node.provision(@default_plan, nil, @default_version)
+        db = node.provision(@default_plan, @creds.merge({ "name" => "retain_test" }), @default_version)
         @test_dbs[db] = []
         conn = connect_to_mysql(db)
         conn.query('create table test(id int)')
@@ -706,7 +714,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
       opts[:max_user_conns] = 1 # easy for testing
       node = new_node(opts)
       EM.add_timer(1) do
-        db = node.provision(@default_plan, nil, @default_version)
+        db = node.provision(@default_plan, @creds.merge({ "name" => "maxconLimit" }), @default_version)
         binding = node.bind(db["service_id"],  @default_opts)
         @test_dbs[db] = [binding]
         expect { conn = connect_to_mysql(db) }.to_not raise_error
@@ -774,6 +782,7 @@ describe "Mysql server node", components: [:nats], hook: :all do
     end
   end
 
+  #TODO: Need move above since we already use given credential now
   it "should provision instance according to the provided credential" do
     EM.run do
       node = new_node(@opts)

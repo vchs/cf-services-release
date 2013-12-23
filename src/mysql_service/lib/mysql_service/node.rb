@@ -293,30 +293,26 @@ class VCAP::Services::Mysql::Node
     @kill_long_transaction_lock.unlock if acquired
   end
 
-  def provision(plan, credential=nil, version=nil, properties={})
+  def provision(plan, credential, version=nil, properties={})
     raise MysqlError.new(MysqlError::MYSQL_INVALID_PLAN, plan) unless plan == @plan
     raise ServiceError.new(ServiceError::UNSUPPORTED_VERSION, version) unless @supported_versions.include?(version)
 
+    raise ServiceError.new(ServiceError::NO_CREDENTIAL) unless credential
+
     provisioned_service = nil
     tried_free_port = false
+    port = nil
     begin
-      if credential
-        # name: the database name
-        service_id, name, user, password = %w(service_id name user password).map { |key| credential[key] }
-        provisioned_service = mysqlProvisionedService.create(new_port(credential["port"]), service_id, name, user, password, version, properties)
-      else
-        # mysql database name should start with alphabet character
-        service_id = generate_service_id
-        name = 'd' + generate_credential(password_length)
-        user = 'u' + generate_credential(password_length)
-        password = 'p' + generate_credential(password_length)
-        provisioned_service = mysqlProvisionedService.create(new_port, service_id, name, user, password, version, properties)
-      end
+      # name: the database name
+      service_id, name, user, password = %w(service_id name user password).map { |key| credential[key] }
+      port = new_port(credential["port"])
+      provisioned_service = mysqlProvisionedService.create(port, service_id, name, user, password, version, properties)
 
       is_restoring = properties && properties["is_restoring"]
       provisioned_service.run do |instance|
         setup_pool(instance)
-        raise "Could not create database" unless is_restoring || create_database(instance)
+        result = is_restoring ? reset_password(instance) : create_database(instance)
+        raise "Could not create database" unless result
       end
       response = gen_credential(provisioned_service.service_id, provisioned_service.name, provisioned_service.user, provisioned_service.password, get_port(provisioned_service))
       @statistics_lock.synchronize do
@@ -326,7 +322,6 @@ class VCAP::Services::Mysql::Node
     rescue => e
       if e.is_a?(ServiceError) && e.error_code == ServiceError::PORT_IN_USE[0]
         raise if tried_free_port
-        port = credential["port"]
         @logger.warn("Found an occupied port #{port}, " \
                      "try to delete the instance with this port")
         ids = mysqlProvisionedService.all(:port => port).map{ |ins| ins.service_id }
@@ -377,7 +372,7 @@ class VCAP::Services::Mysql::Node
       binding[:bind_options] = bind_options
 
       begin
-        create_database_user(service_id, service.name, binding[:user], binding[:password], binding[:bind_options])
+        create_or_update_database_user(service_id, service.name, binding[:user], binding[:password], binding[:bind_options])
         enforce_instance_storage_quota(service)
       rescue Mysql2::Error => e
         raise "Could not create database user: [#{e.errno}] #{e.error}"
@@ -426,7 +421,7 @@ class VCAP::Services::Mysql::Node
       fetch_pool(service_id).with_connection do |connection|
         connection.query("CREATE DATABASE #{name}")
       end
-      create_database_user(service_id, name, user, password, {"privileges" => ["FULL"]})
+      create_or_update_database_user(service_id, name, user, password, {"privileges" => ["FULL"]})
       @logger.debug("Done creating #{provisioned_service.inspect}. Took #{Time.now - start}.")
       return true
     rescue Mysql2::Error => e
@@ -435,17 +430,38 @@ class VCAP::Services::Mysql::Node
     end
   end
 
-  def create_database_user(service_id, database, username, password, binding_options={"privileges"=>["FULL"]})
+
+  def reset_password(provisioned_service)
+    service_id, name, password, user = [:service_id, :name, :password, :user].map { |field| provisioned_service.send(field) }
+
+    begin
+      start = Time.now
+
+      create_or_update_database_user(service_id, name, user, password, {"privileges" => ["FULL"]})
+      @logger.debug("Done reset password #{provisioned_service.inspect}. Took #{Time.now - start}.")
+      return true
+    rescue Mysql2::Error => e
+      @logger.warn("Could not reset password: [#{e.errno}] #{e.error}")
+      return false
+    end
+  end
+
+
+
+
+  def create_or_update_database_user(service_id, database, username, password, binding_options={"privileges"=>["FULL"]})
     @logger.info("Creating credentials: #{username}/#{password} for instance #{service_id}")
     raise "Invalid binding options format #{binding_options.inspect}" unless binding_options.kind_of?(Hash) && binding_options["privileges"]
     binding_privileges = binding_options["privileges"]
     raise "Invalid binding privileges type #{binding_privileges.class}" unless binding_privileges.kind_of?(Array)
+
     fetch_pool(service_id).with_connection do |connection|
+      escaped_password = connection.escape(password)
       grant = { "FULL" => "ALL", "READ_ONLY" => "SELECT" }
       binding_privileges.each do |privilege|
         ['%', 'localhost'].each do |host|
           raise "Unknown binding privileges #{privilege} for database #{database}, username #{username}, password #{password}" unless grant[privilege]
-          connection.query("GRANT #{grant[privilege]} ON #{database}.* to #{username}@'#{host}' IDENTIFIED BY '#{password}' WITH MAX_USER_CONNECTIONS #{@max_user_conns}")
+          connection.query("GRANT #{grant[privilege]} ON #{database}.* to #{username}@'#{host}' IDENTIFIED BY '#{escaped_password}' WITH MAX_USER_CONNECTIONS #{@max_user_conns}")
         end
       end
       connection.query("FLUSH PRIVILEGES")

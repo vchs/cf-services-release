@@ -29,7 +29,7 @@ require_relative "../lib/mssql_service/provisioner"
 
 def getLogger()
   logger = Logger.new(STDOUT)
-  logger.level = Logger::DEBUG
+  logger.level = Logger::ERROR
 
   logger
 end
