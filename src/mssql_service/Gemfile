@@ -16,8 +16,8 @@ gem "curb", "~> 0.7.16"
 gem "redis", "3.0.6"
 gem 'vcap_common', :require => ['vcap/common', 'vcap/component'], :git => 'https://github.com/cloudfoundry/vcap-common.git', :ref => '658be8a8f6'
 gem 'vcap_logging', :require => ['vcap/logging'], :git => 'https://github.com/cloudfoundry/common.git', :ref => 'b96ec1192'
-gem 'vcap_services_base', :git => 'https://github.com/vchs/vcap-services-base.git', :ref => '9e9374a6f'
-gem 'vcap_services_messages', :git => 'https://github.com/vchs/vcap-services-messages', :branch => 'ea67f4dfe2'
+gem 'vcap_services_base', :git => 'https://github.com/Henry-CF/vcap-services-base.git', :ref => '34866fcfe5'
+gem 'vcap_services_messages', :git => 'https://github.com/vchs/vcap-services-messages', :ref => '1bdf2e96c'
 
 group :test do
   gem "activesupport", "3.2.13"

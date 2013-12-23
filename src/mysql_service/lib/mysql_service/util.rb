@@ -44,17 +44,6 @@ module VCAP
             begin
               conn = Mysql2::Client.new(
                 :host => opts[:host],
-                :username => opts[:ins_user],
-                :password => opts[:ins_pass],
-                :database => opts[:db],
-                :port => opts[:port],
-                :socket => opts[:socket],
-                :connect_timeout => 0.5
-              )
-            rescue Mysql2::Error
-              # user had modified instance password, fallback to root account
-              conn = Mysql2::Client.new(
-                :host => opts[:host],
                 :username => opts[:root_user],
                 :password => opts[:root_pass],
                 :database => opts[:db],
@@ -62,7 +51,6 @@ module VCAP
                 :socket => opts[:socket],
                 :connect_timeout => 0.5
               )
-              res = "password-modified"
             end
             conn.query("SHOW TABLES")
           ensure
@@ -125,6 +113,7 @@ module VCAP
           @logger.info("Take backup command: #{cmd}")
 
           on_err = Proc.new do |command, code, msg|
+            system("cat #{output_file}")
             raise "CMD '#{command}' exit with code: #{code}. Message: #{msg}"
           end
           res = nil

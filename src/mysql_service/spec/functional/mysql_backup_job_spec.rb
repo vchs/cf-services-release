@@ -30,14 +30,20 @@ module VCAP::Services::Mysql::Backup
       @default_plan = @opts[:plan]
       @default_version = @opts[:default_version]
       @use_warden = @opts[:use_warden]
+      creds = {
+          "service_id" => UUIDTools::UUID.random_create.to_s,
+          "name"     => 'pooltest',
+          "user"     => 'user',
+          "password" => 'password',
+      }
       EM.run do
         @node = VCAP::Services::Mysql::Node.new(@opts)
         EM.add_timer(1) do
-          @db = @node.provision(@default_plan, nil, @default_version)
+          @db = @node.provision(@default_plan, creds, @default_version)
 
           @test_dbs << @db
 
-          conn = connect_to_mysql(@db)
+          conn = connect_to_mysql(@db, creds['password'])
           conn.query("CREATE TABLE test(id INT)")
           conn.query("INSERT INTO test VALUE(10)")
           conn.query("INSERT INTO test VALUE(20)")
@@ -68,6 +74,8 @@ module VCAP::Services::Mysql::Backup
    describe "create and restore backup jobs" do
 
       def subscribe_restore_channel(service_name, service_id_for_restore)
+        NATS.on_error { EM.stop }
+
         @client = NATS.connect(:uri => @config["mbus"])
         channel = "#{service_name}.restore_backup.#{service_id_for_restore}"
 
@@ -104,11 +112,11 @@ module VCAP::Services::Mysql::Backup
             "service_id" => service_id_for_restore,
             "name"       => @db["name"],
             "user"       => @db["user"],
-            "password"   => @db["password"],
+            "password"   => 'given_password',
           }
           db = @node.provision(@default_plan, creds, @default_version, {"is_restoring" => true})
           @test_dbs << db
-          conn = connect_to_mysql(db)
+          conn = connect_to_mysql(db, creds['password'])
           conn.query("select * from test").each(:symbolize_keys => true) do |row|
             [10, 20].should include(row[:id])
           end
