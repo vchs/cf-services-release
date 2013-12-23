@@ -114,12 +114,6 @@ class VCAP::Services::MSSQL::Provisioner < VCAP::Services::Base::Provisioner
     @node_nats.publish(reply, simple_rep.encode)
   end
 
-  # Generate properties for Restoring and Provisioning
-  def gen_provision_properties(service_id)
-    status = is_restoring?(service_id) ? "Restoring" : "Provisioning"
-    { :status => status }
-  end
-
   def user_triggered_options(args)
     args.merge({ :type => args[:type] || "full", :trigger_by => "user" })
   end
@@ -136,7 +130,17 @@ class VCAP::Services::MSSQL::Provisioner < VCAP::Services::Base::Provisioner
   end
 
   # Generate MSSQL recipes for both single node(peer) and multiple peers topology.
-  def generate_recipes(service_id, plan_config, version, best_nodes, original_credential=nil)
+  def generate_recipes(service_id, plan_config, version, best_nodes, extra_opts = {})
+    original_creds = extra_opts['original_credentials']
+    user_specified_creds = extra_opts['user_specified_credentials']
+
+    #Check Password's validness, assume the caller has filtered invalid-formatted password
+    new_password = user_specified_creds && user_specified_creds.is_a?(Hash) ? user_specified_creds['password'] : nil
+    old_password = original_creds && original_creds.is_a?(Hash) ? original_creds['password'] : nil
+    password = new_password || old_password
+
+    raise ServiceError.new(ServiceError::NO_CREDENTIAL) unless password
+
     credentials = {}
     configuration = {
       "version" => version,
@@ -145,12 +149,12 @@ class VCAP::Services::MSSQL::Provisioner < VCAP::Services::Base::Provisioner
     peers_config = []
     # Must not prefix with number
     name = "d" + generate_credential(dbname_length)
-    user = "u" + generate_credential(dbname_length)
-    password = "p" + generate_credential(password_length)
 
     # If it's restoring, and we still generate different database name on the fly
-    if original_credential && original_credential.has_key?("user") && original_credential.has_key?("password")
-      user, password = %w(user password).map { |key| original_credential[key] }
+    if original_creds && original_creds.has_key?("user")
+      user = original_creds['user']
+    else
+      user = "u" + generate_credential(dbname_length)
     end
 
     # configure active node
@@ -195,7 +199,8 @@ class VCAP::Services::MSSQL::Provisioner < VCAP::Services::Base::Provisioner
     configuration["peers"] = peers_config
     credentials["peers"] = peers_config if best_nodes.size > 1
     configuration["backup_peer"] = get_backup_peer credentials
-    configuration["properties"] = gen_provision_properties service_id
+    status = extra_opts['is_restoring'] ? "Restoring" : "Provisioning"
+    configuration["properties"] = { :status => status }
 
     recipes = VCAP::Services::Internal::ServiceRecipes.new
     recipes.credentials = credentials
