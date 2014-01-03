@@ -33,9 +33,13 @@ class VCAP::Services::Mysql::Provisioner < VCAP::Services::Base::Provisioner
     VCAP::Services::Mysql::Backup::RestoreBackupJob
   end
 
+  def delete_backup_job
+    VCAP::Services::Mysql::Backup::DeleteBackupJob
+  end
+
   def pre_send_announcement
     super
-    %w[create_backup].each do |op|
+    %w[create_backup delete_backup].each do |op|
       eval %[@node_nats.subscribe("#{service_name}.#{op}") { |msg, reply| on_#{op}(msg, reply) }]
     end
   end
@@ -211,7 +215,7 @@ class VCAP::Services::Mysql::Provisioner < VCAP::Services::Base::Provisioner
   end
 
   def on_create_backup(msg, reply)
-    @logger.debug("Receive backup job response: #{msg}")
+    @logger.debug("Receive CreateBackupJob response: #{msg}")
     backup_job_resp = BackupJobResponse.decode(msg)
     resp_to_worker = SimpleResponse.new
 
@@ -226,6 +230,27 @@ class VCAP::Services::Mysql::Provisioner < VCAP::Services::Base::Provisioner
       @custom_resource_manager.update_resource_properties(properties["update_url"], properties)
     end
     f.resume
+    resp_to_worker.success = true
+  rescue => e
+    @logger.warn("Exception at on_create_backup: #{e}")
+    @logger.warn(e)
+    resp_to_worker.success = false
+    resp_to_worker.error = e.to_s
+  ensure
+    @node_nats.publish(reply, resp_to_worker.encode)
+  end
+
+  def on_delete_backup(msg, reply)
+    @logger.debug("Receive DeleteBackupJob response: #{msg}")
+    backup_job_resp = BackupJobResponse.decode(msg)
+    resp_to_worker = SimpleResponse.new
+
+    if backup_job_resp.success
+      @logger.info("DeleteBackupJob #{backup_job_resp.properties} succeeded")
+    else
+      @logger.warn("DeleteBackupJob #{backup_job_resp.properties} failed due to #{backup_job_resp.error}")
+    end
+
     resp_to_worker.success = true
   rescue => e
     @logger.warn("Exception at on_create_backup: #{e}")

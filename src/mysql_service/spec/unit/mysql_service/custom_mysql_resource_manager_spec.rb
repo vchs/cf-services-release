@@ -2,24 +2,27 @@ require 'spec_helper'
 require 'mysql_service/custom_mysql_resource_manager'
 
 describe VCAP::Services::Mysql::CustomMysqlResourceManager do
-  before do
-    VCAP::Services::Mysql::CustomMysqlResourceManager.any_instance.stub(:initialize)
-    VCAP::Services::Mysql::Provisioner.any_instance.stub(:initialize)
-  end
 
-  describe "#create_backup" do
-    let(:provisioner) { VCAP::Services::Mysql::Provisioner.new }
+  [:create_backup, :delete_backup].each do |method|
+    describe method do
+      let(:provisioner) { double("provisioner") }
+      subject do
+        provisioner.stub(:node_nats)
+        opts = { :provisioner => provisioner }
+        VCAP::Services::Mysql::CustomMysqlResourceManager.new(opts)
+      end
 
-    it "should use provisioner to create backup" do
-      args = {"service_id" => "1",
-              "backup_id"  => "2",
-              "update_url" => "http://test.com"}
-      opts = {:type => "full", :trigger_by => "user", :properties => args}
-      blk = lambda { |x| }
-      provisioner.should_receive(:create_backup).with("1", "2", opts, &blk)
+      it "should use provisioner to #{method}" do
+        args = {"service_id" => "1",
+                "backup_id"  => "2",
+                "update_url" => "http://test.com"}
+        opts = {:type => "full", :trigger_by => "user", :properties => args}
+        blk = lambda { |x| }
+        provisioner.should_receive(:user_triggered_options).and_return(opts)
+        provisioner.should_receive(method).with("1", "2", opts, &blk)
 
-      subject.instance_variable_set(:@provisioner, provisioner)
-      subject.create_backup(nil, args, blk)
+        subject.send(method, nil, args, blk)
+      end
     end
   end
 end

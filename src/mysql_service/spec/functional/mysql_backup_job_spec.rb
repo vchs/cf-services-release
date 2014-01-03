@@ -33,9 +33,9 @@ module VCAP::Services::Mysql::Backup
       @use_warden = @opts[:use_warden]
       creds = {
           "service_id" => UUIDTools::UUID.random_create.to_s,
-          "name"     => 'pooltest',
-          "user"     => 'user',
-          "password" => PASSWORD,
+          "name"       => 'pooltest',
+          "user"       => 'user',
+          "password"   => PASSWORD,
       }
       EM.run do
         @node = VCAP::Services::Mysql::Node.new(@opts)
@@ -54,6 +54,13 @@ module VCAP::Services::Mysql::Backup
       end if @use_warden
     end
 
+    after :each do
+      if @pid
+        Process.kill 9, @pid
+        Process.wait @pid
+      end
+    end
+
     after :all do
       EM.run do
         @test_dbs.each do |db|
@@ -66,18 +73,41 @@ module VCAP::Services::Mysql::Backup
           end
         end if @test_dbs
 
-        @client.close if @client
         EM.stop
       end if @use_warden
       stop_redis
     end
 
-   describe "create and restore backup jobs" do
+    describe "create, restore and delete backup jobs" do
 
-      def subscribe_restore_channel(service_name, service_id_for_restore)
-        NATS.on_error { EM.stop }
+      def subscribe_backup_or_delete_channel(service_name, channel, mbus)
+        @client ||= NATS.connect(:uri => mbus)
+        @client.subscribe(channel) do |msg, reply|
+          res = VCAP::Services::Internal::BackupJobResponse.decode(msg)
+          res.success.should eq true
+          if channel =~ /create/
+            res.properties.should include("size", "date", "status")
+          else
+            res.properties.should include("service_id", "backup_id")
+          end
+          sr = VCAP::Services::Internal::SimpleResponse.new
+          sr.success = true
+          @client.publish(reply, sr.encode)
+        end
+      end
 
-        @client = NATS.connect(:uri => @config["mbus"])
+      def create_and_check(service_name, service_id, backup_id, node_id, metadata)
+        job_id = CreateBackupJob.create(:service_id => service_id,
+                                        :backup_id  => backup_id,
+                                        :node_id    => @opts[:node_id],
+                                        :metadata   => metadata)
+
+        job_status = get_job(job_id)
+        backup_id.should eq job_status[:result]["backup_id"]
+      end
+
+      def subscribe_restore_channel(service_name, service_id_for_restore, mbus)
+        @client ||= NATS.connect(:uri => mbus)
         channel = "#{service_name}.restore_backup.#{service_id_for_restore}"
 
         subscription = @client.subscribe(channel) do |msg, reply|
@@ -125,23 +155,30 @@ module VCAP::Services::Mysql::Backup
         end
       end
 
+      def delete_and_check(service_name, service_id, backup_id)
+        job_id = DeleteBackupJob.create(:service_id => service_id,
+                                        :backup_id  => backup_id,
+                                        :node_id    => @opts[:node_id],
+                                        :metadata   => {})
+
+        job_status = get_job(job_id)
+        job_status[:result]["result"].should eq "ok"
+
+        StorageClient.get_file(service_name, service_id, backup_id).should be_nil
+      end
+
       it "should be able to create full & incremental backups and restore them" do
         service_id = @db["service_id"]
         backup_id = nil
+        service_name = "MyaaS"
         ["full", "incremental"].each do |type|
           backup_id = UUIDTools::UUID.random_create.to_s
-          job_id = CreateBackupJob.create(:service_id => service_id,
-                                          :backup_id  => backup_id,
-                                          :node_id    => @opts[:node_id],
-                                          :metadata   => {:type => type}
-                                         )
+          create_and_check(service_name, service_id, backup_id, @opts[:node_id], {:type => type})
 
           instance_backup_info = DBClient.get_instance_backup_info(service_id)
           instance_backup_info.should_not be_nil
           instance_backup_info.values_at(:last_lsn, :last_backup).should_not include(nil)
 
-          job_status = get_job(job_id)
-          backup_id.should eq job_status[:result]["backup_id"]
           single_backup_info = DBClient.get_single_backup_info(service_id, backup_id)
           single_backup_info.should_not be_nil
           single_backup_info.values_at(:backup_id, :type, :date, :manifest).should_not include(nil)
@@ -150,17 +187,16 @@ module VCAP::Services::Mysql::Backup
         end
 
         service_id_for_restore = "restored_db"
-        EM.run do
-          service_name = "MyaaS"
-          subscribe_restore_channel(service_name, service_id_for_restore)
-          restore_and_check(service_id_for_restore, service_id, backup_id, "auto")
 
-          EM.add_timer(10) do
-            fail "Error occurs during communication through nats"
-            EM.stop
+        @pid = fork do
+          EM.run do
+            subscribe_restore_channel(service_name, service_id_for_restore, @config["mbus"])
           end
-
         end
+
+        VCAP::Services::Base::AsyncJob::Config.logger.should_not_receive(:error)
+        restore_and_check(service_id_for_restore, service_id, backup_id, "auto")
+
         check_data_in_new_db(service_id_for_restore, PASSWORD)
       end
 
@@ -169,41 +205,51 @@ module VCAP::Services::Mysql::Backup
         service_id_for_restore = "user_restored_db"
         service_name = "MyaaS"
         backup_id = UUIDTools::UUID.random_create.to_s
-        EM.run do
-          subscribe_restore_channel(service_name, service_id_for_restore)
-          @client.subscribe("#{service_name}.create_backup") do |msg, reply|
-            res = VCAP::Services::Internal::BackupJobResponse.decode(msg)
-            res.success.should eq true
-            res.properties.should include("size", "date", "status")
-            sr = VCAP::Services::Internal::SimpleResponse.new
-            sr.success = true
-            @client.publish(reply, sr.encode)
-          end
 
-          job_id = CreateBackupJob.create(:service_id => service_id,
-                                          :backup_id  => backup_id,
-                                          :node_id    => @opts[:node_id],
-                                          :metadata   => {:type => "full",
-                                                          :trigger_by => "user",
-                                                          :properties => {}}
-                                         )
+        @pid = fork do
+          EM.run do
+            subscribe_backup_or_delete_channel(service_name,
+                                               "#{service_name}.create_backup",
+                                               @config["mbus"])
 
-          job_status = get_job(job_id)
-          backup_id.should eq job_status[:result]["backup_id"]
-          single_backup_info = DBClient.get_single_backup_info(service_id, backup_id)
-          single_backup_info.should be_nil
-
-          StorageClient.get_file(service_name, service_id, backup_id).should_not be_nil
-
-          restore_and_check(service_id_for_restore, service_id, backup_id, "user")
-
-          EM.add_timer(20) do
-            fail "Error occurs during communication through nats"
-            EM.stop
+            subscribe_restore_channel(service_name, service_id_for_restore, @config["mbus"])
           end
         end
 
+        VCAP::Services::Base::AsyncJob::Config.logger.should_not_receive(:error)
+
+        metadata = {:type => "full", :trigger_by => "user", :properties => {}}
+        create_and_check(service_name, service_id, backup_id, @opts[:node_id], metadata)
+        single_backup_info = DBClient.get_single_backup_info(service_id, backup_id)
+        single_backup_info.should be_nil
+        StorageClient.get_file(service_name, service_id, backup_id).should_not be_nil
+
+        restore_and_check(service_id_for_restore, service_id, backup_id, "user")
+
         check_data_in_new_db(service_id_for_restore, PASSWORD)
+      end
+
+      it "should be able to delete user triggerd backup" do
+        service_id = @db["service_id"]
+        backup_id = UUIDTools::UUID.random_create.to_s
+        service_name = "MyaaS"
+        @pid = fork do
+          EM.run do
+            subscribe_backup_or_delete_channel(service_name,
+                                               "#{service_name}.create_backup",
+                                               @config["mbus"])
+
+            subscribe_backup_or_delete_channel(service_name,
+                                               "#{service_name}.delete_backup",
+                                               @config["mbus"])
+          end
+        end
+
+        metadata = {:type => "full", :trigger_by => "user", :properties => {}}
+        create_and_check(service_name, service_id, backup_id, @opts[:node_id], metadata)
+
+        VCAP::Services::Base::AsyncJob::Config.logger.should_not_receive(:error)
+        delete_and_check(service_name, service_id, backup_id)
       end
     end
   end
