@@ -35,6 +35,20 @@ class VCAP::Services::Mysql::CustomMysqlResourceManager < VCAP::Services::Custom
   end
 
   def create_backup(backup_id, args, blk)
+    handle_backup([:service_id, :backup_id, :update_url],
+                  "CreateBackupJob successfully triggerred",
+                  "CreateBackupJob failed",
+                  :create_backup, args, blk)
+  end
+
+  def delete_backup(backup_id, args, blk)
+    handle_backup([:service_id, :backup_id],
+                  "DeleteBackupJob successfully triggerred",
+                  "DeleteBackupJob failed",
+                  :delete_backup, args, blk)
+  end
+
+  def handle_backup(required_fields, success_code, error_code, method_name, args, blk)
     resp = PerformOperationResponse.new({
       :result     => 1,
       :code       => "",
@@ -43,24 +57,24 @@ class VCAP::Services::Mysql::CustomMysqlResourceManager < VCAP::Services::Custom
     })
 
     begin
-      required_options(args, :service_id, :backup_id, :update_url)
+      required_options(args, *required_fields)
       service_id = args["service_id"]
       backup_id  = args["backup_id"]
       opts = @provisioner.user_triggered_options(args)
-      @provisioner.create_backup(service_id, backup_id, opts) do |msg|
+      @provisioner.send(method_name, service_id, backup_id, opts) do |msg|
         if msg["success"]
           resp.result = 0
-          resp.code   = "Backup job successfully triggerred"
+          resp.code   = success_code
         else
           resp.result = 1
-          resp.code   = "Creating backup job failed"
+          resp.code   = error_code
         end
         blk.call(resp.encode)
       end
     rescue => e
       resp.result = 1
-      resp.code   = "Creating backup job failed"
-      @logger.warn("Exception at create_backup: #{e}")
+      resp.code   = error_code
+      @logger.warn("Exception at #{method_name}: #{e}")
       @logger.warn(e)
       blk.call(resp.encode)
     end
