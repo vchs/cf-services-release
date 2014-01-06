@@ -220,11 +220,11 @@ def stop_redis
   }
 end
 
-def expect_statement_allowed!(conn_string, sql)
+def expect_statement_allowed!(sql, options={})
   lastex = nil
   100.times do
     begin
-      Sequel.connect(conn_string) do |conn|
+      Sequel.connect(options) do |conn|
         sleep 0.1
         conn.run(sql)
       end
@@ -234,7 +234,8 @@ def expect_statement_allowed!(conn_string, sql)
       # ignore
     end
   end
-  raise "Timed out waiting for #{sql} to be allowed, last exception #{lastex.inspect}"
+  raise "Timed out waiting for #{sql} to be allowed, " \
+        "last exception #{lastex.inspect}"
 end
 
 def expect_statement_denied!(conn_string, sql)
