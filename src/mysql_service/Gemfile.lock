@@ -38,6 +38,13 @@ GIT
       beefcake
 
 GIT
+  remote: https://github.com/vchs/sc-rubysdk.git
+  revision: 27ce703388dacd17563c3e749a27ecf63597e628
+  ref: 27ce703
+  specs:
+    sc_sdk (0.0.1)
+
+GIT
   remote: https://github.com/vchs/vcap-services-base.git
   revision: 9e9374a6f17c3e7ee867abaa6bf5354aad3133cd
   ref: 9e9374a6f
@@ -90,6 +97,13 @@ GEM
     builder (3.2.2)
     cf-uaa-lib (2.0.0)
       multi_json
+    cf-uaac (2.0.0)
+      cf-uaa-lib (~> 2.0.0)
+      em-http-request (>= 1.0.0.beta.3)
+      eventmachine
+      highline
+      json_pure
+      launchy
     ci_reporter (1.9.0)
       builder (>= 2.1.2)
     coercible (0.2.0)
@@ -201,12 +215,15 @@ GEM
       rack-mount
       virtus (>= 1.0.0)
     hashie (2.0.5)
+    highline (1.6.20)
     http_parser.rb (0.6.0.beta.2)
     httpclient (2.3.4.1)
     i18n (0.6.1)
     ice_nine (0.10.0)
     json (1.8.1)
     json_pure (1.8.1)
+    launchy (2.4.2)
+      addressable (~> 2.3)
     membrane (0.0.2)
     mime-types (2.0)
     mini_portile (0.5.2)
@@ -292,6 +309,8 @@ PLATFORMS
 
 DEPENDENCIES
   activesupport (= 3.2.13)
+  cf-uaa-lib
+  cf-uaac
   ci_reporter (= 1.9.0)
   curb
   datamapper (~> 1.2)
@@ -306,6 +325,7 @@ DEPENDENCIES
   rake
   rspec (= 2.14.1)
   ruby-hmac
+  sc_sdk!
   sequel (= 3.45.0)
   sinatra
   thin

@@ -3,6 +3,10 @@ require "ci/reporter/rake/rspec"
 require "fileutils"
 
 TMP_DIR = File.join(File.dirname(__FILE__), 'tmp')
+WEBAPP_RUNNER_URL = "http://agent:AgenT@blobs.sin2.beefstall.info" \
+                    "/b9/edbf0d5b-6c9c-495f-8a1a-4c653a3b4acc"
+UAA_URL = "http://agent:AgenT@blobs.sin2.beefstall.info" \
+          "/b5/7b65e73d-3d82-4eba-adc9-dea5c85b7a04"
 
 verbose(true)
 
@@ -46,7 +50,16 @@ namespace :spec do
     end
   end
 
-  task :setup => [:checkout_its, :checkout_sc, :checkout_svc_hm]
+  desc "Download UAA"
+  task :checkout_uaa do
+    Dir.chdir File.join(TMP_DIR) do
+      sh "wget -O webapp_runner.jar #{WEBAPP_RUNNER_URL}"
+      sh "wget -O uaa.war #{UAA_URL}"
+    end
+  end
+
+  desc "Setup environment for spec"
+  task :setup => [:checkout_its, :checkout_sc, :checkout_svc_hm, :checkout_uaa]
 
   def git_checkout(base_url, repo, ref)
     FileUtils.mkdir_p TMP_DIR

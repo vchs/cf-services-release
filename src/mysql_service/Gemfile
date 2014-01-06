@@ -28,4 +28,8 @@ group :test do
   gem "sequel", "3.45.0"
   gem "rspec", "2.14.1"
   gem "ci_reporter", "1.9.0"
+  gem "cf-uaac"
+  gem "cf-uaa-lib"
+  gem 'sc_sdk', :git => 'https://github.com/vchs/sc-rubysdk.git',
+                :ref => '27ce703'
 end
