@@ -4,6 +4,35 @@ require 'base/custom_resource_manager'
 class VCAP::Services::MSSQL::ResourceManager < VCAP::Services::CustomResourceManager
   include VCAP::Services::Internal
 
+  def update_credentials(service_id, args, blk)
+    resp = PerformOperationResponse.new({
+              :result     => 1,
+              :code       => "",
+              :properties => {},
+              :body       => {}
+          })
+
+    begin
+      required_options(args, :credentials)
+      @provisioner.update_credentials(service_id, args) do |msg|
+        if msg["success"]
+          resp.result = 0
+          resp.code   = "Credentials successfully updated"
+        else
+          resp.result = 1
+          resp.code   = "Failed to update credentials"
+        end
+        blk.call(resp.encode)
+      end
+    rescue => e
+      resp.result = 1
+      resp.code   = "Failed to update credentials"
+      @logger.warn("Exception at update_credentials: #{e}")
+      @logger.warn(e)
+      blk.call(resp.encode)
+    end
+  end
+
   def create_backup(backup_id, args, blk)
     resp = PerformOperationResponse.new({
       :result     => 1,

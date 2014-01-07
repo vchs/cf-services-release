@@ -3,3 +3,4 @@ _*
 tmp
 vendor/cache
 vendor/bundle
+.DS_Store
