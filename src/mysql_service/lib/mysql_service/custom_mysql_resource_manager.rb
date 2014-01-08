@@ -4,7 +4,6 @@ require 'vcap_services_messages/service_message'
 class VCAP::Services::Mysql::CustomMysqlResourceManager < VCAP::Services::CustomResourceManager
   include VCAP::Services::Internal
 
-
   def update_credentials(service_id, args, blk)
     resp = PerformOperationResponse.new({
               :result     => 1,
@@ -15,6 +14,9 @@ class VCAP::Services::Mysql::CustomMysqlResourceManager < VCAP::Services::Custom
 
     begin
       required_options(args, :credentials)
+      args['credentials'] = JSON.parse(args['credentials']) if args['credentials'].is_a?(String)
+      password_len = args['credentials']['password'].length rescue 0
+      raise 'No password is given in credentials parameter' unless password_len > 0
       @provisioner.update_credentials(service_id, args) do |msg|
         if msg["success"]
           resp.result = 0
@@ -25,6 +27,13 @@ class VCAP::Services::Mysql::CustomMysqlResourceManager < VCAP::Services::Custom
         end
         blk.call(resp.encode)
       end
+    rescue Yajl::ParseError => e
+      resp.result = 1
+      resp.code   = "Invalid format of 'credentials'"
+      @logger.warn("Exception at update_credentials: #{e}")
+      @logger.warn(e)
+      blk.call(resp.encode)
+
     rescue => e
       resp.result = 1
       resp.code   = "Failed to update credentials"
