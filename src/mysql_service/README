@@ -1,4 +1,6 @@
-Update the privileges using the following command.. 
+Update the privileges using the following command..
+
+test
 
 use mysql;
 update user set host='%' where user='root' and host='YOURHOSTNAME';
