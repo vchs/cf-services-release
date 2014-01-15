@@ -5,7 +5,7 @@ USER = "a@b.c"
 PASS = "abc"
 TARGET = "http://localhost:3000"
 
-describe "vCHS mysql service", components: [:nats, :sc_uaa, :sc, :sc_mysql],
+describe "vCHS mysql service", components: [:nats, :sc, :sc_mysql, :sc_uaa],
   hook: :all do
   before :all do
     tokens = ServicesController::SDK.login(TARGET, USER, PASS)
