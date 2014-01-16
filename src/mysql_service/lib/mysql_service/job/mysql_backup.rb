@@ -69,7 +69,7 @@ module VCAP::Services::Mysql::Backup
             properties["date"] = backup[:single_backup][:date]
 
             send_msg("#{service_name}.#{BACKUP_CHANNEL}",
-                     success_response(backup_id, properties))
+                     success_response(properties))
           else
             DBClient.execute_as_transaction do
               DBClient.set_instance_backup_info(name, backup[:instance_info])
@@ -85,7 +85,7 @@ module VCAP::Services::Mysql::Backup
         err_msg = handle_error(e)
         if @metadata[:trigger_by] == "user"
           send_msg("#{service_name}.#{BACKUP_CHANNEL}",
-                   failed_response(backup_id, @metadata[:properties], err_msg))
+                   failed_response(@metadata[:properties], err_msg))
         end
       ensure
         set_status({:complete_time => Time.now.to_s})
@@ -216,6 +216,50 @@ module VCAP::Services::Mysql::Backup
       result = restore_mysql_server(@data_dir, backup_folders, backup_conf)
       raise "Failed to execute restore command to #{name}" unless result
 
+      true
+    end
+  end
+
+  class DeleteBackupJob < BackupJob
+    include VCAP::Services::Mysql::Util
+    include VCAP::Services::Mysql::Common
+    include Common
+
+    BACKUP_CHANNEL = "delete_backup".freeze
+
+    def perform
+      begin
+        required_options :service_id, :backup_id
+        @name = options["service_id"]
+        @backup_id = options["backup_id"]
+        @metadata = VCAP.symbolize_keys(options["metadata"])
+        @logger.info("Launch job: #{self.class} for #{name} with metadata: #{@metadata}")
+
+        properties = @metadata.merge({:service_id => name,
+                                      :backup_id  => backup_id})
+        lock = create_lock
+        lock.lock do
+          result = execute
+          @logger.info("Results of delete backup: #{result}")
+
+          StorageClient.delete_file(service_name, name, backup_id)
+
+          send_msg("#{service_name}.#{BACKUP_CHANNEL}", success_response(properties))
+
+          completed(Yajl::Encoder.encode({:result => :ok}))
+          @logger.info("Complete job: #{self.class} for #{name}")
+        end
+      rescue => e
+        error_msg = handle_error(e)
+        send_msg("#{service_name}.#{BACKUP_CHANNEL}", failed_response(properties, error_msg))
+      ensure
+        set_status({:complete_time => Time.now.to_s})
+      end
+
+    end
+
+    def execute
+      # nothing special to do for mysql
       true
     end
   end
