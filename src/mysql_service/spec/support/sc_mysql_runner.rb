@@ -8,22 +8,21 @@ class ScMysqlRunner < ComponentRunner
     start_redis
     Dir.chdir(File.expand_path("../..", File.dirname(__FILE__))) do
       Bundler.with_clean_env do
-        sh "bundle install >> #{tmp_dir}/log/bundle.out"
         config = MysqlConfig.new(self, opts)
         add_pid Process.spawn(
-          "bundle exec bin/mysql_gateway -c #{config.gateway_file_location}",
+          "bin/mysql_gateway -c #{config.gateway_file_location}",
           log_options(:sc_mysql_gateway)
         )
         wait_for_tcp_ready('Mysql Gateway',
                            config.gateway_config_hash.fetch('port'))
 
         add_pid Process.spawn(
-          "bundle exec bin/mysql_node -c #{config.node_file_location}",
+          "bin/mysql_node -c #{config.node_file_location}",
           log_options(:sc_mysql_node)
         )
         Dir.chdir File.join(tmp_dir, 'svc_hm') do
           add_pid Process.spawn(
-            "bundle exec bin/svc_hm",
+            "bin/svc_hm",
             log_options(:svc_hm)
           )
         end
