@@ -92,14 +92,16 @@ class VCAP::Services::MSSQL::Provisioner < VCAP::Services::Base::Provisioner
     @logger.debug("Receive backup task response: #{msg}")
     rep = BackupTaskResponse.decode(msg)
     simple_rep = SimpleResponse.new
+    properties = rep.properties
 
     if rep.result.upcase.eql? "OK"
-      @logger.info("Backup task #{rep.properties} succeeded")
+      properties.merge!({:status => "completed"})
+      @logger.info("Backup task #{properties} succeeded")
     else
-      @logger.warn("Backup task #{rep.properties} failed due to #{rep.result}")
+      properties.merge!({:status => "failed"})
+      @logger.warn("Backup task #{properties} failed due to #{rep.result}")
     end
 
-    properties = rep.properties
     f = Fiber.new do
       @custom_resource_manager.update_resource_properties(properties["update_url"], properties)
     end
