@@ -29,8 +29,8 @@ GIT
 
 GIT
   remote: https://github.com/vchs/vcap-services-base.git
-  revision: b53a924874afe4569e0b6d2d053954b4a5a0d607
-  ref: b53a924874
+  revision: 31c809e40c91bd652cb0d1d7105ea1e1efd90037
+  ref: 31c809e40c91bd652
   specs:
     vcap_services_base (0.1.17)
       cf-uaa-lib
@@ -57,8 +57,8 @@ GIT
 
 GIT
   remote: https://github.com/vchs/vcap-services-messages
-  revision: 1bdf2e96c93746999479c194373ac573d931a25e
-  ref: 1bdf2e96c
+  revision: 470cd3f0f0bd8f8177b226c3bdd9d2ecb63ffbbb
+  ref: 470cd3f0f0bd8f81
   specs:
     vcap_services_messages (0.1)
       json
@@ -78,7 +78,7 @@ GEM
     bcrypt-ruby (3.1.2)
     beefcake (0.5.0)
     builder (3.2.2)
-    cf-uaa-lib (2.0.0)
+    cf-uaa-lib (2.0.1)
       multi_json
     ci_reporter (1.9.0)
       builder (>= 2.1.2)
@@ -207,7 +207,7 @@ GEM
       thin (>= 1.4.1)
     net-scp (1.1.2)
       net-ssh (>= 2.6.5)
-    net-ssh (2.7.0)
+    net-ssh (2.8.0)
     nokogiri (1.6.1)
       mini_portile (~> 0.5.0)
     posix-spawn (0.3.6)
@@ -228,7 +228,7 @@ GEM
       redis-namespace (~> 1.2)
       sinatra (>= 0.9.2)
       vegas (~> 0.1.2)
-    resque-status (0.4.1)
+    resque-status (0.4.2)
       resque (~> 1.19)
     rspec (2.14.1)
       rspec-core (~> 2.14.0)
