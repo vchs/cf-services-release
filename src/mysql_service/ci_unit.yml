@@ -1,0 +1,22 @@
+---
+nodes:
+  - name: mysql_unit_test
+    instances: 1
+    image: ubuntu-12.4.3-qemu
+    prepare:
+      commands:
+      - apt-get update
+      - >
+        apt-get install -y
+        ruby1.9.3
+        libcurl4-openssl-dev
+        libmysqlclient-dev
+        libpq-dev
+        libsqlite3-dev
+      - gem install --no-rdoc --no-ri bundler
+    run:
+      commands:
+      - src/mysql_service/unit_test.sh
+    capature:
+      files:
+      - reports.tgz
