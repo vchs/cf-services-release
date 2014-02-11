@@ -22,7 +22,7 @@ verbose(true)
 
 namespace :spec do
   desc "Run unit test"
-  RSpec::Core::RakeTask.new(:unit => :setup) do |t|
+  RSpec::Core::RakeTask.new(:unit) do |t|
     t.pattern = "spec/unit/**/*_spec.rb"
   end
 
