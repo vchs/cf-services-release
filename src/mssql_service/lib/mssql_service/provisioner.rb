@@ -26,15 +26,15 @@ class VCAP::Services::MSSQL::Provisioner < VCAP::Services::Base::Provisioner
     if addition_opts && addition_opts[:redis]
       MessageQueue.redis = addition_opts[:redis]
     end
-    %w[backup].each do |op|
+    %w[backup delete_backup].each do |op|
       eval %[@node_nats.subscribe("#{service_name}.#{op}") { |msg, reply| on_#{op}(msg, reply) }]
     end
   end
 
   # Called by MSSQL ResourceManager which handle the http request coms from SC
   def create_backup(service_id, backup_id, opts = {}, &blk)
-    @logger.debug("Backup task for service_id=#{service_id}")
-    @logger.debug("Backup task opts: #{opts}")
+    @logger.debug("BackupTask for service_id=#{service_id}")
+    @logger.debug("BackupTask opts: #{opts}")
 
     options = {
       :id         => generate_credential,
@@ -48,11 +48,42 @@ class VCAP::Services::MSSQL::Provisioner < VCAP::Services::Base::Provisioner
     BackupTask.create(options)
 
     @logger.info("BackupTask created: #{options}")
-    blk.call(success)
+    blk.call(success(options))
   rescue => e
     @logger.warn("BackupTask failed: #{e}")
     @logger.warn(e)
-    blk.call(failure(e))
+    if e.instance_of? ServiceError
+      blk.call(failure(e))
+    else
+      blk.call(internal_fail)
+    end
+  end
+
+  # Called by MSSQL ResourceManager which handle the http request coms from SC
+  def delete_backup(service_id, backup_id, opts = {}, &blk)
+    @logger.debug("DeleteBackupTask for service_id=#{service_id}")
+    
+    options = {
+      :id         => generate_credential,
+      :name       => "delete_backup",
+      :node_id    => find_backup_peer(service_id),
+      :service_id => service_id,
+      :backup_id  => backup_id,
+      :properties => opts
+    }
+
+    DeleteBackupTask.create(options);
+
+    @logger.info("DeleteBackupTask created: #{options}")
+    blk.call(success(options))
+  rescue => e
+    @logger.error("DeleteBackupTask failed: #{e}")
+    @logger.warn(e)
+    if e.instance_of? ServiceError
+      blk.call(failure(e))
+    else
+      blk.call(internal_fail)
+    end
   end
 
   # Called by base provisioner(provisioner_v3.rb), and we should overried it here
@@ -89,17 +120,17 @@ class VCAP::Services::MSSQL::Provisioner < VCAP::Services::Base::Provisioner
 
   # Handle backup response from Node throug NATS(MSSQL.backup)
   def on_backup(msg, reply)
-    @logger.debug("Receive backup task response: #{msg}")
+    @logger.debug("Receive BackupTask response: #{msg}")
     rep = BackupTaskResponse.decode(msg)
     simple_rep = SimpleResponse.new
     properties = rep.properties
 
     if rep.result.upcase.eql? "OK"
       properties.merge!({:status => "completed"})
-      @logger.info("Backup task #{properties} succeeded")
+      @logger.info("BackupTask succeeded, properties: #{properties} ")
     else
       properties.merge!({:status => "failed"})
-      @logger.warn("Backup task #{properties} failed due to #{rep.result}")
+      @logger.warn("BackupTask failed due to #{rep.result}, properties: #{properties} ")
     end
 
     f = Fiber.new do
@@ -116,8 +147,30 @@ class VCAP::Services::MSSQL::Provisioner < VCAP::Services::Base::Provisioner
     @node_nats.publish(reply, simple_rep.encode)
   end
 
+  def on_delete_backup(msg, reply)
+    @logger.debug("Receive DeleteBackupTask response: #{msg}")
+    rep = BackupTaskResponse.decode(msg)
+    simple_rep = SimpleResponse.new
+    properties = rep.properties
+
+    if rep.result.upcase.eql? "OK"
+      @logger.info("DeleteBackupTask succeeded, properties: #{properties}")
+    else
+      @logger.warn("DeleteBackupTask failed due to #{rep.result}, properties: #{properties}")
+    end
+
+    simple_rep.success = true
+  rescue => e
+    @logger.warn("Exception at on_delete_backup: #{e}")
+    @logger.warn(e)
+    simple_rep.success = false
+    simple_rep.error = e.to_s
+  ensure
+    @node_nats.publish(reply, simple_rep.encode)
+  end
+
   def user_triggered_options(args)
-    args.merge({ :type => args[:type] || "full", :trigger_by => "user" })
+    args.merge({ "type" => args[:type] || "full", "trigger_by" => "user" })
   end
 
   def periodically_triggered_options(args)
@@ -290,4 +343,5 @@ end
 # Alias
 MessageQueue = VCAP::Services::MSSQL::MessageQueue
 BackupTask = VCAP::Services::MSSQL::BackupTask
+DeleteBackupTask = VCAP::Services::MSSQL::BackupTask
 RestoreTask = VCAP::Services::MSSQL::RestoreTask
