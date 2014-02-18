@@ -1,0 +1,39 @@
+#!/usr/bin/env ruby
+
+home = File.join(File.dirname(__FILE__), '..')
+$LOAD_PATH.unshift File.join(home, 'lib')
+ENV['BUNDLE_GEMFILE'] ||= File.join(home, 'Gemfile')
+
+require 'bundler/setup'
+require 'optparse'
+require 'backup_manager'
+
+config_path = ENV['CLOUD_FOUNDRY_CONFIG_PATH'] || File.join(home, 'config')
+config_file ||= File.join(config_path, 'backup_manager.yml')
+
+OptionParser.new do |opts|
+  opts.banner = "Usage: #{$0.split(/\//)[-1]} [options]"
+  opts.on("-c", "--config [ARG]", "Configuration File") do |opt|
+    config_file = opt
+  end
+  opts.on("-h", "--help", "Help") do
+    puts opts
+    exit
+  end
+end.parse!
+
+begin
+  config = YAML.load_file(config_file)
+rescue => e
+  abort "Could not read configuration file:  #{e}"
+end
+
+bm = BackupManager::Manager.new(config)
+
+pid_file = config['pid']
+VCAP::PidFile.new(pid_file) if pid_file
+
+trap('INT') { bm.shutdown }
+trap('SIGTERM') { bm.shutdown }
+
+bm.start
