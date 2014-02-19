@@ -111,9 +111,10 @@ class VCAP::Services::Mysql::Provisioner < VCAP::Services::Base::Provisioner
 
     is_restoring = extra_opts['is_restoring']
 
-    #Check Password's validness, assume the caller has filtered invalid-formatted password
-    password = user_specified_creds['password'] rescue nil
-    raise ServiceError.new(ServiceError::NO_CREDENTIAL) unless ( is_restoring || password)
+    unless is_restoring
+      password = user_specified_creds['password'] rescue nil
+      raise ServiceError.new(ServiceError::NO_CREDENTIAL) unless password
+    end
 
     configuration = {
       "version" => version,
