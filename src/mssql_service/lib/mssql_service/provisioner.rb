@@ -62,7 +62,7 @@ class VCAP::Services::MSSQL::Provisioner < VCAP::Services::Base::Provisioner
   # Called by MSSQL ResourceManager which handle the http request coms from SC
   def delete_backup(service_id, backup_id, opts = {}, &blk)
     @logger.debug("DeleteBackupTask for service_id=#{service_id}")
-    
+
     options = {
       :id         => generate_credential,
       :name       => "delete_backup",
@@ -191,9 +191,10 @@ class VCAP::Services::MSSQL::Provisioner < VCAP::Services::Base::Provisioner
 
     is_restoring = extra_opts['is_restoring']
 
-    #Check Password's validness, assume the caller has filtered invalid-formatted password
-    password = user_specified_creds['password'] rescue nil
-    raise ServiceError.new(ServiceError::NO_CREDENTIAL) unless ( is_restoring || password)
+    unless is_restoring
+      password = user_specified_creds['password'] rescue nil
+      raise ServiceError.new(ServiceError::NO_CREDENTIAL) unless password
+    end
 
     credentials = {}
     configuration = {
@@ -326,18 +327,9 @@ class VCAP::Services::MSSQL::Provisioner < VCAP::Services::Base::Provisioner
       "user" => username,
       "username" => username,
       "password" => password,
-      "uri" => generate_uri(username, password, host, port, database)
     }
   end
 
-  def generate_uri(username, password, host, port, database)
-    scheme = 'mssql'
-    credentials = "#{username}:#{password}"
-    path = "/#{database}"
-
-    uri = URI::Generic.new(scheme, credentials, host, port, nil, path, nil, nil, nil)
-    uri.to_s
-  end
 end
 
 # Alias
