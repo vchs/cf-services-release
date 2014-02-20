@@ -45,9 +45,21 @@ GIT
     sc_sdk (0.0.1)
 
 GIT
+  remote: https://github.com/vchs/vcap-injection.git
+  revision: 103ffe791f08b91c6f1eca17fcb9c08c3ae8aab9
+  specs:
+    vcap_injection (0.0.1)
+      aquarium
+      eventmachine
+      nats
+      vcap_common
+      vcap_services_messages
+      yajl-ruby
+
+GIT
   remote: https://github.com/vchs/vcap-services-base.git
-  revision: 8694f5c6937ec1185b15450b01215082b988ef8d
-  ref: 8694f5c693
+  revision: 7225414719c0ed23e8fb880b4a327a311073ea1d
+  ref: 7225414719c0ed23
   specs:
     vcap_services_base (0.1.17)
       cf-uaa-lib
@@ -88,6 +100,7 @@ GEM
       i18n (= 0.6.1)
       multi_json (~> 1.0)
     addressable (2.3.5)
+    aquarium (0.5.1)
     axiom-types (0.0.5)
       descendants_tracker (~> 0.0.1)
       ice_nine (~> 0.9)
@@ -333,6 +346,7 @@ DEPENDENCIES
   unf
   uuidtools
   vcap_common!
+  vcap_injection!
   vcap_logging!
   vcap_services_base!
   vcap_services_messages!
