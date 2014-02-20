@@ -17,7 +17,7 @@ gem "rake"
 gem "curb"
 gem 'vcap_common', :require => ['vcap/common', 'vcap/component'], :git => 'https://github.com/cloudfoundry/vcap-common.git', :ref => '658be8a8f6'
 gem 'vcap_logging', :require => ['vcap/logging'], :git => 'https://github.com/cloudfoundry/common.git', :ref => 'b96ec1192'
-gem 'vcap_services_base', :git => 'https://github.com/vchs/vcap-services-base.git',     :ref => '8694f5c693'
+gem 'vcap_services_base', :git => 'https://github.com/vchs/vcap-services-base.git', :ref => '7225414719c0ed23'
 gem 'vcap_services_messages', :git => 'https://github.com/vchs/vcap-services-messages', :ref => '470cd3f0f0bd8f81'
 gem 'warden-client', :require => ['warden/client'], :git => 'https://github.com/cloudfoundry/warden.git', :ref => 'fe6cb51'
 gem 'warden-protocol', :require => ['warden/protocol'], :git => 'https://github.com/cloudfoundry/warden.git', :ref => 'fe6cb51'
