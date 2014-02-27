@@ -1,0 +1,13 @@
+source 'http://rubygems.org'
+
+gem 'rake'
+gem 'eventmachine', '~> 1.0.0'
+gem 'cf-message-bus'
+
+gem 'steno', '~> 1.2.0', :git => 'https://github.com/cloudfoundry/steno.git'
+gem 'vcap_common', :git => 'https://github.com/cloudfoundry/vcap-common.git'
+gem 'vcap_services_messages', :git => 'https://github.com/vchs/vcap-services-messages', :ref => 'ef4a4e1f52'
+
+group :test do
+  gem 'rspec'
+end

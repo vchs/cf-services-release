@@ -1,0 +1,9 @@
+mbus: nats://localhost:4222
+logging:
+  level: info
+pid: /var/vcap/sys/run/backup_manager.pid
+services:
+  - MyaaS
+  - MSSQLaaS
+handle_fetch_interval: 10
+gateway_timeout: 5
