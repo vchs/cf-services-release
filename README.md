@@ -1,3 +1,5 @@
+# THIS REPO HAS BEEN DEPRECATED
+
 # Cloud Foundry Services
 
 This project is a bosh release containing services that work with Cloud Foundry v2.
